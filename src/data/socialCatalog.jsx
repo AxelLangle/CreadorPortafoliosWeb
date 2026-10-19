@@ -194,7 +194,31 @@ export function resolveSafeSocialUrl(platformId, rawInput, countryCode = '52') {
 }
 
 /**
- * Portafolio inicial preconfigurado para la prueba solicitada: "its.araaaby"
+ * Avatar neutral predeterminado (SVG en modo oscuro Obsidian Bio) para cuentas nuevas.
+ */
+export const DEFAULT_NEUTRAL_AVATAR =
+  "data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 256 256'%3E%3Crect width='256' height='256' fill='%231c1b1b'/%3E%3Ccircle cx='128' cy='96' r='44' fill='%234edea3' fill-opacity='0.85'/%3E%3Cpath d='M48 216c14-38 44-58 80-58s66 20 80 58' fill='%234edea3' fill-opacity='0.45'/%3E%3C/svg%3E";
+
+/**
+ * Obtiene la imagen de fondo efectiva para la opción "Foto Personalizada":
+ * - Por defecto utiliza SIEMPRE la foto de perfil actual del portafolio (`avatar_url`).
+ * - Solo si el usuario subió explícitamente otra imagen de fondo (`has_custom_background: true`),
+ *   se utiliza `background_image_url`.
+ */
+export function getEffectiveBackgroundImage(portfolio) {
+  if (!portfolio) return DEFAULT_NEUTRAL_AVATAR;
+  if (
+    portfolio.has_custom_background &&
+    portfolio.background_image_url &&
+    portfolio.background_image_url.trim() !== ''
+  ) {
+    return portfolio.background_image_url;
+  }
+  return portfolio.avatar_url || DEFAULT_NEUTRAL_AVATAR;
+}
+
+/**
+ * Portafolio inicial preconfigurado
  * Cumple con la estructura relacional en 3 niveles de la Sección 6 del SRS:
  * 6.1 Tabla Portfolios
  * 6.2 Tabla SocialNetworkGroups
@@ -209,9 +233,10 @@ export const INITIAL_PORTFOLIO_DATA = {
   bio: 'Fitness Coach • Nail Artist • Creadora Digital',
   avatar_url: '/avatar-its-araaaby.jpeg',
   background_type: 'BLACK', // 'BLACK' | 'IMAGE'
-  background_image_url: '/avatar-its-araaaby.jpeg',
-  background_image_name: 'Foto de perfil its.araaaby.jpeg',
-  background_image_meta: '1080 × 1920 • Optimizado WebP',
+  has_custom_background: false,
+  background_image_url: '',
+  background_image_name: '',
+  background_image_meta: 'Optimizado WebP',
   background_overlay_opacity: 45, // 0 a 80 (valor por defecto en SRS: 40)
   is_published: true,
   social_network_groups: [
@@ -407,7 +432,8 @@ export function getActivePortfolioLinks(portfolio) {
  */
 export function exportStandaloneStaticHtml(portfolio) {
   const activeLinks = getActivePortfolioLinks(portfolio);
-  const isImageBg = portfolio.background_type === 'IMAGE' && portfolio.background_image_url;
+  const effectiveBgUrl = getEffectiveBackgroundImage(portfolio);
+  const isImageBg = portfolio.background_type === 'IMAGE' && Boolean(effectiveBgUrl);
   const overlayOpacity = Math.min(80, Math.max(0, Number(portfolio.background_overlay_opacity ?? 40))) / 100;
   const displayHandle = (portfolio.display_name || portfolio.slug || 'usuario').startsWith('@')
     ? portfolio.display_name || `@${portfolio.slug}`
@@ -454,7 +480,7 @@ export function exportStandaloneStaticHtml(portfolio) {
       justify-content: space-between;
       position: relative;
       overflow-x: hidden;
-      ${isImageBg ? `background-image: url('${portfolio.background_image_url}'); background-size: cover; background-position: center; background-attachment: fixed;` : ''}
+      ${isImageBg ? `background-image: url('${effectiveBgUrl}'); background-size: cover; background-position: center; background-attachment: fixed;` : ''}
     }
     .overlay {
       position: fixed;
