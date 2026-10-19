@@ -1,97 +1,253 @@
 import React, { useState } from 'react';
-
-const RESERVED_SLUGS = ['admin', 'login', 'settings', 'api', 'root', 'support'];
+import {
+  simpleHash,
+  checkSlugAvailability,
+  createBlankPortfolio,
+  authenticateWithGoogleOAuth2,
+} from '../services/authAndPortfolioStore';
 
 /**
- * Pantalla 1: Inicio, Registro e Inicio de Sesión (Onboarding)
- * Basado en el mockup "LinkPortfolio - Onboarding y Registro" de Google Stitch AI (RF-01, RF-02).
+ * Pantalla 1: Inicio, Registro e Inicio de Sesión en Modo Producción (Onboarding)
+ * Con aislamiento estricto entre cuentas, protección de @its.araaaby e integración Google OAuth 2.0.
  */
 export default function OnboardingView({
-  portfolio,
-  onUpdatePortfolio,
+  db,
+  onLoginSuccess,
+  onRegisterNewPortfolio,
   onNavigate,
 }) {
-  const [authMode, setAuthMode] = useState('register'); // 'register' | 'login' | 'recover'
-  const [slugInput, setSlugInput] = useState(portfolio.slug || 'its.araaaby');
-  const [emailInput, setEmailInput] = useState(portfolio.email || 'its.araaaby@portafolio.app');
-  const [passwordInput, setPasswordInput] = useState('Araaaby2026#');
+  const [authMode, setAuthMode] = useState('login'); // 'login' | 'register' | 'recover'
+  const [slugInput, setSlugInput] = useState('mi-portafolio');
+  const [emailInput, setEmailInput] = useState('');
+  const [passwordInput, setPasswordInput] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
   const [feedbackMsg, setFeedbackMsg] = useState('');
+  const [oauthLoading, setOauthLoading] = useState(false);
 
-  const trimmedSlug = slugInput.trim().toLowerCase().replace(/[^a-z0-9._-]/g, '');
-  const isTooShort = trimmedSlug.length < 3;
-  const isReserved = RESERVED_SLUGS.includes(trimmedSlug);
-  const isAvailable = !isTooShort && !isReserved;
+  const slugCheck = checkSlugAvailability(db, slugInput);
 
   const passwordStrength =
     passwordInput.length >= 10
       ? { label: 'Seguridad alta', color: 'text-secondary' }
       : passwordInput.length >= 6
       ? { label: 'Seguridad media', color: 'text-on-surface-variant' }
-      : { label: 'Muy corta', color: 'text-error' };
+      : { label: 'Mín. 8 caracteres', color: 'text-outline' };
 
   const handleSubmit = (e) => {
     e.preventDefault();
+    setErrorMsg('');
+    setFeedbackMsg('');
+
+    const cleanEmail = emailInput.trim().toLowerCase();
+
     if (authMode === 'recover') {
       setFeedbackMsg(
-        `Hemos enviado un enlace de recuperación de contraseña a ${emailInput || 'tu correo'}.`
+        `Si el correo ${cleanEmail} está registrado, recibirá instrucciones o puede solicitar restablecimiento al Super Administrador.`
       );
       return;
     }
 
-    if (!isAvailable && authMode === 'register') return;
+    // MODO INICIAR SESIÓN: Verificar estrictamente credenciales
+    if (authMode === 'login') {
+      const enteredHash = simpleHash(passwordInput);
 
-    const finalSlug = trimmedSlug || 'its.araaaby';
-    onUpdatePortfolio({
-      ...portfolio,
-      slug: finalSlug,
-      display_name: portfolio.display_name || `@${finalSlug}`,
-      email: emailInput,
-    });
-    onNavigate('editor');
+      // 1. ¿Es el Super Administrador?
+      if (
+        cleanEmail === (db.admin_config?.email || '').toLowerCase() &&
+        enteredHash === db.admin_config?.password_hash
+      ) {
+        onLoginSuccess(
+          {
+            role: 'ADMIN',
+            email: cleanEmail,
+            authenticatedAt: new Date().toISOString(),
+          },
+          'admin'
+        );
+        return;
+      }
+
+      // 2. ¿Es propietario de algún portafolio registrado (ej. @its.araaaby)?
+      const matchedPortfolio = (db.portfolios || []).find(
+        (p) =>
+          (p.owner_email?.toLowerCase() === cleanEmail ||
+            p.slug?.toLowerCase() === cleanEmail.replace(/^@/, '')) &&
+          p.owner_password_hash === enteredHash
+      );
+
+      if (matchedPortfolio) {
+        onLoginSuccess(
+          {
+            role: 'USER',
+            email: matchedPortfolio.owner_email,
+            portfolioId: matchedPortfolio.id,
+            slug: matchedPortfolio.slug,
+            authenticatedAt: new Date().toISOString(),
+          },
+          'editor',
+          matchedPortfolio.id
+        );
+        return;
+      }
+
+      setErrorMsg(
+        'Credenciales incorrectas. Cada portafolio está protegido y solo su propietario autorizado o el Administrador pueden editarlo.'
+      );
+      return;
+    }
+
+    // MODO REGISTRO: Crear una cuenta nueva aislada (sin tocar jamás @its.araaaby)
+    if (authMode === 'register') {
+      if (!slugCheck.available) {
+        setErrorMsg(
+          `El enlace "${slugInput}" no está disponible (${slugCheck.reason}). Elige otro identificador.`
+        );
+        return;
+      }
+
+      const emailAlreadyUsed = (db.portfolios || []).some(
+        (p) => p.owner_email?.toLowerCase() === cleanEmail
+      );
+      if (emailAlreadyUsed || cleanEmail === db.admin_config?.email?.toLowerCase()) {
+        setErrorMsg(
+          'Este correo electrónico ya tiene un portafolio registrado. Inicia sesión con tu contraseña.'
+        );
+        return;
+      }
+
+      if (passwordInput.length < 6) {
+        setErrorMsg('La contraseña debe tener al menos 6 caracteres.');
+        return;
+      }
+
+      const newProfile = createBlankPortfolio({
+        slug: slugCheck.cleanSlug,
+        email: cleanEmail,
+        password: passwordInput,
+        displayName: `@${slugCheck.cleanSlug}`,
+      });
+
+      onRegisterNewPortfolio(newProfile);
+    }
   };
 
-  const handleGoogleAccess = () => {
-    const finalSlug = isAvailable ? trimmedSlug : portfolio.slug || 'its.araaaby';
-    onUpdatePortfolio({
-      ...portfolio,
-      slug: finalSlug,
-      email: emailInput || 'its.araaaby@gmail.com',
-    });
-    onNavigate('editor');
+  // Inicio de sesión real con Google OAuth 2.0 (Google Identity Services)
+  const handleGoogleSignIn = async () => {
+    setErrorMsg('');
+    setFeedbackMsg('');
+    setOauthLoading(true);
+    try {
+      const googleUser = await authenticateWithGoogleOAuth2(db.google_client_id);
+      const gEmail = googleUser.email.toLowerCase();
+
+      // 1. Verificar si el correo de Google pertenece al Super Administrador
+      if (gEmail === (db.admin_config?.email || '').toLowerCase()) {
+        onLoginSuccess(
+          {
+            role: 'ADMIN',
+            email: gEmail,
+            name: googleUser.name,
+            authenticatedAt: new Date().toISOString(),
+          },
+          'admin'
+        );
+        return;
+      }
+
+      // 2. Verificar si ya tiene un portafolio asignado (ej. el correo de tu esposa para @its.araaaby)
+      const existingPortfolio = (db.portfolios || []).find(
+        (p) => p.owner_email?.toLowerCase() === gEmail
+      );
+
+      if (existingPortfolio) {
+        onLoginSuccess(
+          {
+            role: 'USER',
+            email: gEmail,
+            portfolioId: existingPortfolio.id,
+            slug: existingPortfolio.slug,
+            authenticatedAt: new Date().toISOString(),
+          },
+          'editor',
+          existingPortfolio.id
+        );
+        return;
+      }
+
+      // 3. Si es un usuario nuevo con Google, crear su propio portafolio aislado
+      const baseSlug = (gEmail.split('@')[0] || 'creador')
+        .toLowerCase()
+        .replace(/[^a-z0-9._-]/g, '');
+      const check = checkSlugAvailability(db, baseSlug);
+      const finalSlug = check.available
+        ? check.cleanSlug
+        : `${baseSlug}-${Math.floor(100 + Math.random() * 900)}`;
+
+      const createdProfile = createBlankPortfolio({
+        slug: finalSlug,
+        email: gEmail,
+        password: `GoogleOAuth_${googleUser.sub || Date.now()}`,
+        displayName: `@${finalSlug}`,
+        avatarUrl: googleUser.picture,
+      });
+
+      onRegisterNewPortfolio(createdProfile);
+    } catch (err) {
+      setErrorMsg(err.message);
+    } finally {
+      setOauthLoading(false);
+    }
   };
 
   return (
     <div className="bg-surface text-on-surface min-h-screen flex flex-col antialiased">
-      {/* Cabecera Superior Estilo Stitch */}
+      {/* Cabecera Superior */}
       <header className="sticky top-0 inset-x-0 z-40 bg-surface/80 backdrop-blur-xl border-b border-outline-variant/15 shadow-[0_1px_8px_rgba(0,0,0,0.4)]">
         <div className="max-w-lg mx-auto h-16 px-4 flex items-center justify-between">
-          <div className="flex items-center gap-2.5 min-h-[44px]">
+          <button
+            type="button"
+            onClick={() => onNavigate('public')}
+            className="flex items-center gap-2.5 min-h-[44px] text-left"
+          >
             <div className="w-8 h-8 rounded-lg bg-primary text-on-primary flex items-center justify-center font-bold text-sm shadow-sm">
               LP
             </div>
             <span className="font-headline-sm text-headline-sm text-primary tracking-tight">
               LinkPortfolio
             </span>
-          </div>
+          </button>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5">
             <button
               type="button"
-              onClick={() =>
-                setAuthMode(authMode === 'login' ? 'register' : 'login')
-              }
-              className="min-h-[40px] px-3 rounded-lg inline-flex items-center justify-center font-label-lg text-label-lg text-on-surface-variant hover:text-primary hover:bg-surface-container transition-colors"
+              onClick={() => {
+                setErrorMsg('');
+                setAuthMode(authMode === 'login' ? 'register' : 'login');
+              }}
+              className="h-9 px-3 rounded-lg inline-flex items-center justify-center font-label-md text-label-md text-on-surface-variant hover:text-primary hover:bg-surface-container transition-colors"
             >
               {authMode === 'login' ? 'Crear cuenta' : 'Iniciar sesión'}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => onNavigate('admin')}
+              className="h-9 px-3 rounded-lg bg-surface-container-high hover:bg-surface-container-highest text-secondary font-label-sm text-label-sm flex items-center gap-1 transition-colors"
+              title="Acceso exclusivo para Super Administrador"
+            >
+              <span className="material-symbols-outlined text-[16px]">
+                admin_panel_settings
+              </span>
+              <span>Admin</span>
             </button>
           </div>
         </div>
       </header>
 
-      {/* Contenido Principal Centrado */}
-      <main className="flex-1 flex flex-col relative w-full max-w-md mx-auto pt-4 pb-28 px-4">
-        {/* Micro-Banner Interactivo con Pulso Esmeralda */}
+      {/* Contenido Principal */}
+      <main className="flex-1 flex flex-col relative w-full max-w-md mx-auto pt-4 pb-24 px-4">
+        {/* Micro-Banner */}
         <div className="w-full flex items-center justify-center pt-2 pb-4">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-surface-container-high/60 backdrop-blur-md border border-outline-variant/20">
             <span className="relative flex h-2 w-2">
@@ -99,29 +255,63 @@ export default function OnboardingView({
               <span className="relative inline-flex rounded-full h-2 w-2 bg-secondary" />
             </span>
             <span className="font-label-sm text-label-sm uppercase tracking-wider text-secondary">
-              Edición Creadores • Portafolio Web
+              Cuentas Aisladas y Protegidas
             </span>
           </div>
         </div>
 
+        {/* Selector de Pestañas Login / Registro */}
+        <div className="w-full bg-surface-container-lowest p-1 rounded-xl flex items-center gap-1 mb-5 border border-outline-variant/20">
+          <button
+            type="button"
+            onClick={() => {
+              setErrorMsg('');
+              setAuthMode('login');
+            }}
+            className={`flex-1 h-10 rounded-lg font-label-lg text-label-lg transition-all ${
+              authMode === 'login'
+                ? 'bg-primary text-on-primary font-semibold'
+                : 'text-on-surface-variant hover:text-primary'
+            }`}
+          >
+            Iniciar Sesión
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setErrorMsg('');
+              setAuthMode('register');
+            }}
+            className={`flex-1 h-10 rounded-lg font-label-lg text-label-lg transition-all ${
+              authMode === 'register'
+                ? 'bg-primary text-on-primary font-semibold'
+                : 'text-on-surface-variant hover:text-primary'
+            }`}
+          >
+            Crear Portafolio Nuevo
+          </button>
+        </div>
+
         {/* Hero Section */}
-        <div className="text-center px-2 mb-6">
+        <div className="text-center px-2 mb-5">
           <h1 className="font-headline-xl-mobile text-headline-xl-mobile text-primary font-bold tracking-tight mb-2">
-            {authMode === 'register' && 'Tu portafolio social en segundos.'}
-            {authMode === 'login' && 'Bienvenido de nuevo a LinkPortfolio.'}
-            {authMode === 'recover' && 'Recupera el acceso a tu cuenta.'}
+            {authMode === 'register' && 'Crea tu propio portafolio social.'}
+            {authMode === 'login' && 'Accede a tu panel de edición.'}
+            {authMode === 'recover' && 'Recuperación de acceso.'}
           </h1>
-          <p className="font-body-md text-body-md text-on-surface-variant max-w-[330px] mx-auto leading-relaxed">
-            {authMode === 'recover'
-              ? 'Ingresa tu correo electrónico y te enviaremos un enlace seguro para restablecer tu contraseña.'
-              : 'Una foto de perfil, tu fondo favorito y todas tus cuentas en un solo enlace.'}
+          <p className="font-body-md text-body-md text-on-surface-variant max-w-[340px] mx-auto leading-relaxed">
+            {authMode === 'login' &&
+              'Ingresa con las credenciales de tu portafolio o con tu cuenta autorizada de Google.'}
+            {authMode === 'register' &&
+              'Reclama un enlace disponible. Los perfiles existentes (como @its.araaaby) se encuentran protegidos.'}
+            {authMode === 'recover' &&
+              'Ingresa tu correo registrado para solicitar restablecimiento.'}
           </p>
         </div>
 
-        {/* Tarjeta Interactiva de Reclamo de Ruta Personalizada (Slug - RF-02) */}
-        {authMode !== 'recover' && (
-          <div className="bg-surface-container-low rounded-xl p-4 sm:p-5 mb-5 shadow-lg relative overflow-hidden group border border-outline-variant/20">
-            <div className="absolute -right-8 -top-8 w-28 h-28 bg-secondary/10 rounded-full blur-2xl pointer-events-none transition-opacity duration-500 group-hover:opacity-100" />
+        {/* Reclamo de Ruta Personalizada (SOLO en modo Registro de nuevo portafolio) */}
+        {authMode === 'register' && (
+          <div className="bg-surface-container-low rounded-xl p-4 sm:p-5 mb-5 shadow-lg relative overflow-hidden border border-outline-variant/20">
             <div className="flex items-center justify-between mb-3">
               <label
                 htmlFor="claimed-slug"
@@ -133,11 +323,10 @@ export default function OnboardingView({
                 Reclama tu enlace único
               </label>
               <span className="font-label-sm text-label-sm text-on-surface-variant/70 uppercase tracking-wider">
-                Paso 1 de 2
+                Verificación en vivo
               </span>
             </div>
 
-            {/* Caja Compuesta de Entrada de URL */}
             <div className="relative bg-surface-container rounded-lg px-3.5 py-2.5 flex items-center justify-between transition-colors focus-within:bg-surface-container-high border border-outline-variant/20">
               <div className="flex items-center min-w-0 flex-1 mr-2">
                 <span className="font-body-md text-body-md text-outline select-none shrink-0 font-normal">
@@ -146,18 +335,16 @@ export default function OnboardingView({
                 <input
                   id="claimed-slug"
                   type="text"
-                  aria-label="Nombre de usuario personalizado"
                   value={slugInput}
                   onChange={(e) =>
                     setSlugInput(e.target.value.toLowerCase().replace(/\s+/g, ''))
                   }
-                  placeholder="its.araaaby"
+                  placeholder="tu-nombre"
                   className="bg-transparent border-0 outline-none font-label-lg text-label-lg text-primary font-medium w-full min-w-0 p-0 focus:ring-0 ml-0.5 tracking-tight"
                 />
               </div>
 
-              {/* Indicador de Disponibilidad en Tiempo Real */}
-              {isAvailable ? (
+              {slugCheck.available ? (
                 <div className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-secondary-container/20 shrink-0">
                   <span
                     className="material-symbols-outlined text-secondary text-[15px]"
@@ -172,60 +359,41 @@ export default function OnboardingView({
               ) : (
                 <div className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-error-container/30 shrink-0">
                   <span className="material-symbols-outlined text-error text-[15px]">
-                    error
+                    lock
                   </span>
                   <span className="font-label-sm text-label-sm text-error font-semibold">
-                    {isTooShort ? 'Muy corto' : 'No disponible'}
+                    {slugCheck.reason}
                   </span>
                 </div>
               )}
             </div>
+          </div>
+        )}
 
-            <div className="mt-3.5 pt-3 border-t border-outline-variant/15 flex items-center justify-between text-on-surface-variant/80">
-              <div className="flex items-center gap-2 min-w-0">
-                <div className="w-6 h-6 rounded-full bg-surface-container-highest flex items-center justify-center shrink-0">
-                  <span className="material-symbols-outlined text-[14px] text-primary">
-                    public
-                  </span>
-                </div>
-                <p className="font-body-sm text-body-sm truncate text-on-surface-variant">
-                  Portafolio activo:{' '}
-                  <span className="text-primary font-medium">@{trimmedSlug || 'its.araaaby'}</span>
-                </p>
-              </div>
-              <span className="material-symbols-outlined text-[16px] text-secondary">
-                auto_awesome
-              </span>
-            </div>
+        {errorMsg && (
+          <div className="mb-4 p-3.5 rounded-xl bg-error-container/30 border border-error/40 text-error font-body-sm text-body-sm flex items-start gap-2">
+            <span className="material-symbols-outlined text-[18px] shrink-0 mt-0.5">
+              error
+            </span>
+            <span>{errorMsg}</span>
           </div>
         )}
 
         {feedbackMsg && (
-          <div className="mb-4 p-3.5 rounded-xl bg-secondary-container/20 border border-secondary/30 text-secondary font-body-sm text-body-sm flex items-center justify-between">
-            <span>{feedbackMsg}</span>
-            <button
-              type="button"
-              onClick={() => {
-                setFeedbackMsg('');
-                setAuthMode('login');
-              }}
-              className="underline font-semibold ml-2"
-            >
-              Iniciar sesión
-            </button>
+          <div className="mb-4 p-3.5 rounded-xl bg-secondary-container/20 border border-secondary/30 text-secondary font-body-sm text-body-sm">
+            {feedbackMsg}
           </div>
         )}
 
-        {/* Formulario de Autenticación (RF-01) */}
+        {/* Formulario de Autenticación */}
         <form onSubmit={handleSubmit} className="flex flex-col gap-3.5 mb-5">
-          {/* Campo Correo Electrónico */}
           <div className="flex flex-col gap-1.5">
             <label
               htmlFor="email-input"
               className="font-label-md text-label-md text-on-surface font-medium flex items-center justify-between"
             >
               <span>Correo electrónico</span>
-              <span className="text-outline text-label-sm font-normal">Privado</span>
+              <span className="text-outline text-label-sm font-normal">Verificado</span>
             </label>
             <div className="relative bg-surface-container rounded-lg flex items-center px-3.5 py-3 transition-colors focus-within:bg-surface-container-high border border-outline-variant/20">
               <span className="material-symbols-outlined text-outline text-[20px] mr-3 select-none">
@@ -237,13 +405,12 @@ export default function OnboardingView({
                 required
                 value={emailInput}
                 onChange={(e) => setEmailInput(e.target.value)}
-                placeholder="its.araaaby@portafolio.app"
+                placeholder="correo@ejemplo.com"
                 className="w-full bg-transparent border-0 outline-none text-primary font-body-md text-body-md placeholder:text-outline p-0 focus:ring-0"
               />
             </div>
           </div>
 
-          {/* Campo Contraseña (visible en Registro e Inicio de Sesión) */}
           {authMode !== 'recover' && (
             <div className="flex flex-col gap-1.5">
               <div className="flex items-center justify-between">
@@ -253,9 +420,11 @@ export default function OnboardingView({
                 >
                   Contraseña
                 </label>
-                <span className={`font-label-sm text-label-sm ${passwordStrength.color}`}>
-                  {passwordStrength.label}
-                </span>
+                {authMode === 'register' && (
+                  <span className={`font-label-sm text-label-sm ${passwordStrength.color}`}>
+                    {passwordStrength.label}
+                  </span>
+                )}
               </div>
               <div className="relative bg-surface-container rounded-lg flex items-center px-3.5 py-3 transition-colors focus-within:bg-surface-container-high border border-outline-variant/20">
                 <span className="material-symbols-outlined text-outline text-[20px] mr-3 select-none">
@@ -267,7 +436,7 @@ export default function OnboardingView({
                   required
                   value={passwordInput}
                   onChange={(e) => setPasswordInput(e.target.value)}
-                  placeholder="Mínimo 8 caracteres"
+                  placeholder="••••••••••••"
                   className="w-full bg-transparent border-0 outline-none text-primary font-body-md text-body-md placeholder:text-outline p-0 focus:ring-0"
                 />
                 <button
@@ -282,14 +451,17 @@ export default function OnboardingView({
                 </button>
               </div>
 
-              {/* Enlace de Recuperación de Contraseña */}
-              <div className="flex justify-end pt-0.5">
+              <div className="flex justify-between items-center pt-0.5">
                 <button
                   type="button"
-                  onClick={() => {
-                    setFeedbackMsg('');
-                    setAuthMode('recover');
-                  }}
+                  onClick={() => onNavigate('public')}
+                  className="font-body-sm text-body-sm text-outline hover:text-primary transition-colors"
+                >
+                  ← Volver al portafolio público
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAuthMode('recover')}
                   className="font-body-sm text-body-sm text-outline hover:text-primary transition-colors"
                 >
                   ¿Olvidaste tu contraseña?
@@ -298,37 +470,26 @@ export default function OnboardingView({
             </div>
           )}
 
-          {/* Botón Principal de Acción */}
           <button
             type="submit"
             className="mt-2 w-full h-12 bg-primary text-on-primary font-label-lg text-label-lg font-semibold rounded-lg flex items-center justify-center gap-2 transition-all active:scale-[0.985] hover:opacity-95 shadow-md shadow-primary/10 cursor-pointer"
           >
             <span>
-              {authMode === 'register' && 'Crear y configurar mi portafolio'}
-              {authMode === 'login' && 'Entrar al panel de edición'}
-              {authMode === 'recover' && 'Enviar correo de recuperación'}
+              {authMode === 'login' && 'Iniciar sesión en mi portafolio'}
+              {authMode === 'register' && 'Crear mi portafolio independiente'}
+              {authMode === 'recover' && 'Solicitar recuperación'}
             </span>
             <span className="material-symbols-outlined text-[18px]">arrow_forward</span>
           </button>
-
-          {authMode === 'recover' && (
-            <button
-              type="button"
-              onClick={() => setAuthMode('login')}
-              className="w-full h-10 rounded-lg text-on-surface-variant hover:text-primary font-label-md text-label-md"
-            >
-              Volver a iniciar sesión
-            </button>
-          )}
         </form>
 
-        {/* Separador y Acceso con Google OAuth (Stitch 1) */}
+        {/* Inicio de Sesión con Google OAuth 2.0 */}
         {authMode !== 'recover' && (
           <>
             <div className="flex items-center gap-3 my-2">
               <div className="flex-1 h-[1px] bg-surface-container-highest" />
               <span className="font-label-sm text-label-sm text-outline font-normal select-none">
-                o continúa con
+                o autentícate con OAuth 2.0
               </span>
               <div className="flex-1 h-[1px] bg-surface-container-highest" />
             </div>
@@ -336,8 +497,9 @@ export default function OnboardingView({
             <div className="mt-3 mb-6">
               <button
                 type="button"
-                onClick={handleGoogleAccess}
-                className="w-full h-12 bg-surface-container hover:bg-surface-container-high text-primary font-label-lg text-label-lg font-medium rounded-lg flex items-center justify-center gap-3 transition-all active:scale-[0.985] border border-outline-variant/20 cursor-pointer"
+                disabled={oauthLoading}
+                onClick={handleGoogleSignIn}
+                className="w-full h-12 bg-surface-container hover:bg-surface-container-high text-primary font-label-lg text-label-lg font-medium rounded-lg flex items-center justify-center gap-3 transition-all active:scale-[0.985] border border-outline-variant/20 cursor-pointer disabled:opacity-50"
               >
                 <svg aria-hidden="true" className="w-5 h-5" viewBox="0 0 24 24">
                   <path
@@ -357,41 +519,13 @@ export default function OnboardingView({
                     fill="#EA4335"
                   />
                 </svg>
-                <span>Continuar con Google</span>
+                <span>
+                  {oauthLoading ? 'Conectando con Google...' : 'Continuar con Google (OAuth 2.0)'}
+                </span>
               </button>
             </div>
           </>
         )}
-
-        {/* Prueba Social de Creadores (Stitch 1) */}
-        <div className="bg-surface-container-lowest rounded-xl p-3.5 mb-6 flex items-center justify-between border border-outline-variant/15">
-          <div className="flex items-center gap-3">
-            <img
-              src={portfolio.avatar_url || '/avatar-its-araaaby.jpeg'}
-              alt="Creadora destacada"
-              className="w-8 h-8 rounded-full object-cover ring-1 ring-secondary/50"
-            />
-            <p className="font-body-sm text-body-sm text-on-surface-variant">
-              Portafolio activo de prueba:{' '}
-              <button
-                type="button"
-                onClick={() => onNavigate('public')}
-                className="font-semibold text-primary underline hover:text-secondary"
-              >
-                @its.araaaby
-              </button>
-            </p>
-          </div>
-          <span className="material-symbols-outlined text-secondary text-[18px]">verified</span>
-        </div>
-
-        <footer className="text-center px-4">
-          <p className="font-body-sm text-body-sm text-outline leading-snug">
-            Al registrarte aceptas los{' '}
-            <span className="text-on-surface-variant underline">Términos de Uso</span> y la{' '}
-            <span className="text-on-surface-variant underline">Política de Privacidad</span>.
-          </p>
-        </footer>
       </main>
     </div>
   );
