@@ -1,5 +1,9 @@
 import React from 'react';
-import { getActivePortfolioLinks } from '../data/socialCatalog';
+import {
+  getActivePortfolioLinks,
+  getEffectiveBackgroundImage,
+  DEFAULT_NEUTRAL_AVATAR,
+} from '../data/socialCatalog';
 
 /**
  * Pantalla 3: Vista Pública del Portafolio (Experiencia del Visitante)
@@ -12,8 +16,9 @@ export default function PublicPortfolioView({
   onNavigate,
 }) {
   const activeLinks = getActivePortfolioLinks(portfolio);
+  const effectiveBgImage = getEffectiveBackgroundImage(portfolio);
   const isImageMode =
-    portfolio.background_type === 'IMAGE' && Boolean(portfolio.background_image_url);
+    portfolio.background_type === 'IMAGE' && Boolean(effectiveBgImage);
   const overlayOpacity = Math.min(
     80,
     Math.max(0, Number(portfolio.background_overlay_opacity ?? 40))
@@ -65,30 +70,32 @@ export default function PublicPortfolioView({
 
   return (
     <div
-      className={`relative w-full flex flex-col justify-between items-center select-none overflow-x-hidden transition-colors duration-300 ${
+      className={`relative w-full flex flex-col justify-between items-center select-none overflow-x-hidden transition-colors duration-300 bg-[#000000] ${
         isSimulator ? 'min-h-full rounded-[32px]' : 'min-h-screen'
       }`}
-      style={{
-        backgroundColor: '#000000',
-        ...(isImageMode
-          ? {
-              backgroundImage: `url('${portfolio.background_image_url}')`,
-              backgroundSize: 'cover',
-              backgroundPosition: 'center',
-              backgroundRepeat: 'no-repeat',
-            }
-          : {}),
-      }}
     >
-      {/* Capa de oscurecimiento (Overlay ajustable de 0% a 80% en Modo Foto Personalizada - RF-05) */}
+      {/* Imagen de fondo personalizada o foto de perfil predeterminada + Capa de oscurecimiento (RF-05) */}
       {isImageMode && (
         <div
-          className="absolute inset-0 pointer-events-none transition-opacity duration-200"
-          style={{
-            backgroundColor: `rgba(0, 0, 0, ${overlayOpacity / 100})`,
-            backdropFilter: 'contrast(1.03)',
-          }}
-        />
+          className={`${
+            isSimulator ? 'absolute' : 'fixed'
+          } inset-0 pointer-events-none z-0 overflow-hidden`}
+        >
+          <img
+            key={effectiveBgImage.slice(-64)}
+            src={effectiveBgImage}
+            alt=""
+            aria-hidden="true"
+            className="w-full h-full object-cover object-center"
+          />
+          <div
+            className="absolute inset-0 transition-opacity duration-200"
+            style={{
+              backgroundColor: `rgba(0, 0, 0, ${overlayOpacity / 100})`,
+              backdropFilter: 'contrast(1.03)',
+            }}
+          />
+        </div>
       )}
 
       {/* Contenedor central (máximo 480px de ancho según Sección 3 - Pantalla 3) */}
@@ -133,7 +140,7 @@ export default function PublicPortfolioView({
               >
                 <div className="w-full h-full rounded-full overflow-hidden bg-surface-container border-2 border-white/20">
                   <img
-                    src={portfolio.avatar_url || '/avatar-its-araaaby.jpeg'}
+                    src={portfolio.avatar_url || DEFAULT_NEUTRAL_AVATAR}
                     alt={`Foto de perfil de ${formattedHandle}`}
                     className="w-full h-full object-cover"
                   />
