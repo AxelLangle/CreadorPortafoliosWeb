@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   simpleHash,
   checkSlugAvailability,
@@ -7,8 +7,9 @@ import {
 } from '../services/authAndPortfolioStore';
 
 /**
- * Pantalla 1: Inicio, Registro e Inicio de Sesión en Modo Producción (Onboarding)
- * Con aislamiento estricto entre cuentas, protección de @its.araaaby e integración Google OAuth 2.0.
+ * Pantalla 1 (Página Principal `/`): Inicio, Registro e Inicio de Sesión
+ * Incluye monitoreo de estado de la ventana emergente de Google OAuth 2.0 para liberar
+ * el botón automáticamente si el usuario cierra el popup sin seleccionar cuenta.
  */
 export default function OnboardingView({
   db,
@@ -27,6 +28,26 @@ export default function OnboardingView({
 
   const slugCheck = checkSlugAvailability(db, slugInput);
 
+  // Trigger reactivo adicional en el componente: revisa el estado del botón de Google OAuth
+  // cuando la ventana principal recupera el foco o pasan más de 900ms tras cerrar el popup.
+  useEffect(() => {
+    if (!oauthLoading) return undefined;
+
+    let focusTimeout = null;
+    const checkPopupClosedOnFocus = () => {
+      if (focusTimeout) clearTimeout(focusTimeout);
+      focusTimeout = setTimeout(() => {
+        setOauthLoading((prev) => (prev ? false : prev));
+      }, 900);
+    };
+
+    window.addEventListener('focus', checkPopupClosedOnFocus);
+    return () => {
+      if (focusTimeout) clearTimeout(focusTimeout);
+      window.removeEventListener('focus', checkPopupClosedOnFocus);
+    };
+  }, [oauthLoading]);
+
   const passwordStrength =
     passwordInput.length >= 10
       ? { label: 'Seguridad alta', color: 'text-secondary' }
@@ -43,16 +64,16 @@ export default function OnboardingView({
 
     if (authMode === 'recover') {
       setFeedbackMsg(
-        `Si el correo ${cleanEmail} está registrado, recibirá instrucciones o puede solicitar restablecimiento al Super Administrador.`
+        `Si el correo ${cleanEmail} está registrado, recibirá instrucciones o puede solicitar restablecimiento al administrador.`
       );
       return;
     }
 
-    // MODO INICIAR SESIÓN: Verificar estrictamente credenciales
+    // MODO INICIAR SESIÓN
     if (authMode === 'login') {
       const enteredHash = simpleHash(passwordInput);
 
-      // 1. ¿Es el Super Administrador?
+      // 1. Verificar si es el Super Administrador
       if (
         cleanEmail === (db.admin_config?.email || '').toLowerCase() &&
         enteredHash === db.admin_config?.password_hash
@@ -68,7 +89,7 @@ export default function OnboardingView({
         return;
       }
 
-      // 2. ¿Es propietario de algún portafolio registrado (ej. @its.araaaby)?
+      // 2. Verificar si es propietario de algún portafolio registrado
       const matchedPortfolio = (db.portfolios || []).find(
         (p) =>
           (p.owner_email?.toLowerCase() === cleanEmail ||
@@ -92,12 +113,12 @@ export default function OnboardingView({
       }
 
       setErrorMsg(
-        'Credenciales incorrectas. Cada portafolio está protegido y solo su propietario autorizado o el Administrador pueden editarlo.'
+        'Correo o contraseña incorrectos. Verifica tus datos o crea una cuenta nueva.'
       );
       return;
     }
 
-    // MODO REGISTRO: Crear una cuenta nueva aislada (sin tocar jamás @its.araaaby)
+    // MODO REGISTRO: Crear una cuenta nueva aislada
     if (authMode === 'register') {
       if (!slugCheck.available) {
         setErrorMsg(
@@ -132,7 +153,7 @@ export default function OnboardingView({
     }
   };
 
-  // Inicio de sesión real con Google OAuth 2.0 (Google Identity Services)
+  // Inicio de sesión real con Google OAuth 2.0
   const handleGoogleSignIn = async () => {
     setErrorMsg('');
     setFeedbackMsg('');
@@ -155,7 +176,7 @@ export default function OnboardingView({
         return;
       }
 
-      // 2. Verificar si ya tiene un portafolio asignado (ej. el correo de tu esposa para @its.araaaby)
+      // 2. Verificar si ya tiene un portafolio asignado
       const existingPortfolio = (db.portfolios || []).find(
         (p) => p.owner_email?.toLowerCase() === gEmail
       );
@@ -205,18 +226,14 @@ export default function OnboardingView({
       {/* Cabecera Superior */}
       <header className="sticky top-0 inset-x-0 z-40 bg-surface/80 backdrop-blur-xl border-b border-outline-variant/15 shadow-[0_1px_8px_rgba(0,0,0,0.4)]">
         <div className="max-w-lg mx-auto h-16 px-4 flex items-center justify-between">
-          <button
-            type="button"
-            onClick={() => onNavigate('public')}
-            className="flex items-center gap-2.5 min-h-[44px] text-left"
-          >
+          <div className="flex items-center gap-2.5 min-h-[44px]">
             <div className="w-8 h-8 rounded-lg bg-primary text-on-primary flex items-center justify-center font-bold text-sm shadow-sm">
               LP
             </div>
             <span className="font-headline-sm text-headline-sm text-primary tracking-tight">
               LinkPortfolio
             </span>
-          </button>
+          </div>
 
           <div className="flex items-center gap-1.5">
             <button
@@ -234,7 +251,7 @@ export default function OnboardingView({
               type="button"
               onClick={() => onNavigate('admin')}
               className="h-9 px-3 rounded-lg bg-surface-container-high hover:bg-surface-container-highest text-secondary font-label-sm text-label-sm flex items-center gap-1 transition-colors"
-              title="Acceso exclusivo para Super Administrador"
+              title="Acceso exclusivo para Administrador"
             >
               <span className="material-symbols-outlined text-[16px]">
                 admin_panel_settings
@@ -255,7 +272,7 @@ export default function OnboardingView({
               <span className="relative inline-flex rounded-full h-2 w-2 bg-secondary" />
             </span>
             <span className="font-label-sm text-label-sm uppercase tracking-wider text-secondary">
-              Cuentas Aisladas y Protegidas
+              Plataforma de Portafolios Web
             </span>
           </div>
         </div>
@@ -288,28 +305,28 @@ export default function OnboardingView({
                 : 'text-on-surface-variant hover:text-primary'
             }`}
           >
-            Crear Portafolio Nuevo
+            Crear Cuenta
           </button>
         </div>
 
         {/* Hero Section */}
         <div className="text-center px-2 mb-5">
           <h1 className="font-headline-xl-mobile text-headline-xl-mobile text-primary font-bold tracking-tight mb-2">
-            {authMode === 'register' && 'Crea tu propio portafolio social.'}
+            {authMode === 'register' && 'Tu portafolio social en segundos.'}
             {authMode === 'login' && 'Accede a tu panel de edición.'}
             {authMode === 'recover' && 'Recuperación de acceso.'}
           </h1>
           <p className="font-body-md text-body-md text-on-surface-variant max-w-[340px] mx-auto leading-relaxed">
             {authMode === 'login' &&
-              'Ingresa con las credenciales de tu portafolio o con tu cuenta autorizada de Google.'}
+              'Ingresa con tus credenciales o con tu cuenta de Google para gestionar tus redes sociales.'}
             {authMode === 'register' &&
-              'Reclama un enlace disponible. Los perfiles existentes (como @its.araaaby) se encuentran protegidos.'}
+              'Una foto de perfil, tu fondo favorito y todas tus redes sociales en un solo enlace.'}
             {authMode === 'recover' &&
               'Ingresa tu correo registrado para solicitar restablecimiento.'}
           </p>
         </div>
 
-        {/* Reclamo de Ruta Personalizada (SOLO en modo Registro de nuevo portafolio) */}
+        {/* Reclamo de Ruta Personalizada (SOLO en modo Registro) */}
         {authMode === 'register' && (
           <div className="bg-surface-container-low rounded-xl p-4 sm:p-5 mb-5 shadow-lg relative overflow-hidden border border-outline-variant/20">
             <div className="flex items-center justify-between mb-3">
@@ -339,7 +356,7 @@ export default function OnboardingView({
                   onChange={(e) =>
                     setSlugInput(e.target.value.toLowerCase().replace(/\s+/g, ''))
                   }
-                  placeholder="tu-nombre"
+                  placeholder="tu-usuario"
                   className="bg-transparent border-0 outline-none font-label-lg text-label-lg text-primary font-medium w-full min-w-0 p-0 focus:ring-0 ml-0.5 tracking-tight"
                 />
               </div>
@@ -393,7 +410,7 @@ export default function OnboardingView({
               className="font-label-md text-label-md text-on-surface font-medium flex items-center justify-between"
             >
               <span>Correo electrónico</span>
-              <span className="text-outline text-label-sm font-normal">Verificado</span>
+              <span className="text-outline text-label-sm font-normal">Privado</span>
             </label>
             <div className="relative bg-surface-container rounded-lg flex items-center px-3.5 py-3 transition-colors focus-within:bg-surface-container-high border border-outline-variant/20">
               <span className="material-symbols-outlined text-outline text-[20px] mr-3 select-none">
@@ -451,14 +468,7 @@ export default function OnboardingView({
                 </button>
               </div>
 
-              <div className="flex justify-between items-center pt-0.5">
-                <button
-                  type="button"
-                  onClick={() => onNavigate('public')}
-                  className="font-body-sm text-body-sm text-outline hover:text-primary transition-colors"
-                >
-                  ← Volver al portafolio público
-                </button>
+              <div className="flex justify-end items-center pt-0.5">
                 <button
                   type="button"
                   onClick={() => setAuthMode('recover')}
@@ -475,12 +485,22 @@ export default function OnboardingView({
             className="mt-2 w-full h-12 bg-primary text-on-primary font-label-lg text-label-lg font-semibold rounded-lg flex items-center justify-center gap-2 transition-all active:scale-[0.985] hover:opacity-95 shadow-md shadow-primary/10 cursor-pointer"
           >
             <span>
-              {authMode === 'login' && 'Iniciar sesión en mi portafolio'}
-              {authMode === 'register' && 'Crear mi portafolio independiente'}
+              {authMode === 'login' && 'Iniciar sesión'}
+              {authMode === 'register' && 'Crear mi portafolio'}
               {authMode === 'recover' && 'Solicitar recuperación'}
             </span>
             <span className="material-symbols-outlined text-[18px]">arrow_forward</span>
           </button>
+
+          {authMode === 'recover' && (
+            <button
+              type="button"
+              onClick={() => setAuthMode('login')}
+              className="w-full h-10 rounded-lg text-on-surface-variant hover:text-primary font-label-md text-label-md"
+            >
+              Volver a iniciar sesión
+            </button>
+          )}
         </form>
 
         {/* Inicio de Sesión con Google OAuth 2.0 */}
@@ -489,7 +509,7 @@ export default function OnboardingView({
             <div className="flex items-center gap-3 my-2">
               <div className="flex-1 h-[1px] bg-surface-container-highest" />
               <span className="font-label-sm text-label-sm text-outline font-normal select-none">
-                o autentícate con OAuth 2.0
+                o continúa con
               </span>
               <div className="flex-1 h-[1px] bg-surface-container-highest" />
             </div>
@@ -497,9 +517,8 @@ export default function OnboardingView({
             <div className="mt-3 mb-6">
               <button
                 type="button"
-                disabled={oauthLoading}
                 onClick={handleGoogleSignIn}
-                className="w-full h-12 bg-surface-container hover:bg-surface-container-high text-primary font-label-lg text-label-lg font-medium rounded-lg flex items-center justify-center gap-3 transition-all active:scale-[0.985] border border-outline-variant/20 cursor-pointer disabled:opacity-50"
+                className="w-full h-12 bg-surface-container hover:bg-surface-container-high text-primary font-label-lg text-label-lg font-medium rounded-lg flex items-center justify-center gap-3 transition-all active:scale-[0.985] border border-outline-variant/20 cursor-pointer"
               >
                 <svg aria-hidden="true" className="w-5 h-5" viewBox="0 0 24 24">
                   <path
@@ -520,12 +539,20 @@ export default function OnboardingView({
                   />
                 </svg>
                 <span>
-                  {oauthLoading ? 'Conectando con Google...' : 'Continuar con Google (OAuth 2.0)'}
+                  {oauthLoading ? 'Esperando selección en Google...' : 'Continuar con Google'}
                 </span>
               </button>
             </div>
           </>
         )}
+
+        <footer className="text-center px-4 mt-auto pt-4">
+          <p className="font-body-sm text-body-sm text-outline leading-snug">
+            Al usar LinkPortfolio aceptas los{' '}
+            <span className="text-on-surface-variant underline">Términos de Servicio</span> y la{' '}
+            <span className="text-on-surface-variant underline">Política de Privacidad</span>.
+          </p>
+        </footer>
       </main>
     </div>
   );
