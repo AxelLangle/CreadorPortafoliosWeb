@@ -19,11 +19,11 @@ export default function PublicPortfolioView({
     Math.max(0, Number(portfolio.background_overlay_opacity ?? 40))
   );
 
-  const formattedHandle = (portfolio.display_name || portfolio.slug || 'its.araaaby')
+  const formattedHandle = (portfolio.display_name || portfolio.slug || 'usuario')
     .trim()
     .startsWith('@')
     ? (portfolio.display_name || portfolio.slug).trim()
-    : `@${(portfolio.display_name || portfolio.slug || 'its.araaaby').trim()}`;
+    : `@${(portfolio.display_name || portfolio.slug || 'usuario').trim()}`;
 
   // Modo Mantenimiento / Borrador (Pantalla 4: Interruptor de privacidad desactivado)
   if (!portfolio.is_published && !isSimulator) {
