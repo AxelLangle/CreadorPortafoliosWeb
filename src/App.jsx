@@ -20,66 +20,104 @@ export default function App() {
   const [db, setDb] = useState(() => loadDatabase());
   const [session, setSession] = useState(() => loadActiveSession());
 
-  // Determinar portafolio activo y vista inicial según la URL (/admin, /login, /?u=slug o /slug)
+  // Determinar portafolio activo y vista inicial según la URL:
+  // - Raíz (/) -> Pantalla de Iniciar Sesión o Crear Cuenta ('onboarding')
+  // - /<slug> o /?u=<slug> -> Vista Pública de ese portafolio ('public')
+  // - /admin o /?mode=admin -> Consola de Super Administrador ('admin')
   const [activePortfolioId, setActivePortfolioId] = useState(() => {
     const initialDb = loadDatabase();
     const params = new URLSearchParams(window.location.search);
-    const requestedSlug =
+    const requestedSlug = (
       params.get('u') ||
-      window.location.pathname.replace(/^\/+|\/+$/g, '').toLowerCase();
+      window.location.pathname.replace(/^\/+|\/+$/g, '')
+    )
+      .trim()
+      .toLowerCase();
 
     if (
       requestedSlug &&
       !['admin', 'login', 'onboarding', 'settings', 'editor'].includes(requestedSlug)
     ) {
       const found = initialDb.portfolios.find(
-        (p) => p.slug.toLowerCase() === requestedSlug.toLowerCase()
+        (p) => p.slug.toLowerCase() === requestedSlug
       );
       if (found) return found.id;
     }
 
-    const defaultProfile =
-      initialDb.portfolios.find((p) => p.slug === initialDb.default_slug) ||
-      initialDb.portfolios[0];
-    return defaultProfile.id;
+    const activeSess = loadActiveSession();
+    if (activeSess?.portfolioId) {
+      const sessionPortfolio = initialDb.portfolios.find(
+        (p) => p.id === activeSess.portfolioId
+      );
+      if (sessionPortfolio) return sessionPortfolio.id;
+    }
+
+    return initialDb.portfolios[0]?.id || '';
   });
 
   const [currentView, setCurrentView] = useState(() => {
+    const initialDb = loadDatabase();
     const params = new URLSearchParams(window.location.search);
-    const mode = params.get('mode');
-    const path = window.location.pathname.replace(/^\/+|\/+$/g, '').toLowerCase();
+    const mode = (params.get('mode') || '').toLowerCase();
+    const path = window.location.pathname.replace(/^\/+|\/+$/g, '').trim().toLowerCase();
+    const querySlug = (params.get('u') || '').trim().toLowerCase();
+
     if (mode === 'admin' || path === 'admin') return 'admin';
     if (mode === 'login' || path === 'login' || path === 'onboarding') return 'onboarding';
-    return 'public';
+
+    // Si en la URL viene un slug válido (?u=slug o /slug), mostrar el portafolio público
+    const candidateSlug = querySlug || path;
+    if (candidateSlug) {
+      const found = initialDb.portfolios.find(
+        (p) => p.slug.toLowerCase() === candidateSlug
+      );
+      if (found) return 'public';
+    }
+
+    // Por defecto, la raíz (/) va directo a Iniciar Sesión o Crear Cuenta
+    return 'onboarding';
   });
 
   const [editorTab, setEditorTab] = useState('redes');
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
 
   const activePortfolio =
-    db.portfolios.find((p) => p.id === activePortfolioId) ||
-    db.portfolios.find((p) => p.slug === db.default_slug) ||
-    db.portfolios[0];
+    db.portfolios.find((p) => p.id === activePortfolioId) || db.portfolios[0];
 
   const userCanEditActive = canEditPortfolio(session, activePortfolio);
 
   // RNF-04: Actualizar Metadatos Open Graph Dinámicos y título del documento
   useEffect(() => {
-    if (!activePortfolio) return;
+    const setMeta = (selector, attr, val) => {
+      const el = document.querySelector(selector);
+      if (el && val) el.setAttribute(attr, val);
+    };
+
+    if (currentView === 'onboarding' || currentView === 'admin' || !activePortfolio) {
+      document.title = 'LinkPortfolio — Inicia Sesión o Crea tu Portafolio';
+      setMeta(
+        'meta[property="og:title"]',
+        'content',
+        'LinkPortfolio — Crea tu Portafolio de Redes Sociales'
+      );
+      setMeta(
+        'meta[property="og:description"]',
+        'content',
+        'Plataforma minimalista de enlaces y perfiles oficiales de redes sociales.'
+      );
+      setMeta('meta[name="twitter:title"]', 'content', 'LinkPortfolio — Portafolio Digital');
+      return;
+    }
+
     const handle = (
       activePortfolio.display_name ||
       activePortfolio.slug ||
-      'its.araaaby'
+      'usuario'
     ).startsWith('@')
       ? activePortfolio.display_name || `@${activePortfolio.slug}`
       : `@${activePortfolio.display_name || activePortfolio.slug}`;
 
     document.title = `${handle} | LinkPortfolio — Enlaces Oficiales`;
-
-    const setMeta = (selector, attr, val) => {
-      const el = document.querySelector(selector);
-      if (el && val) el.setAttribute(attr, val);
-    };
 
     setMeta('meta[property="og:title"]', 'content', `${handle} | Portafolio de Redes Sociales`);
     setMeta(
@@ -87,18 +125,12 @@ export default function App() {
       'content',
       activePortfolio.bio || `Conecta con todas las redes sociales oficiales de ${handle}.`
     );
-    setMeta(
-      'meta[property="og:image"]',
-      'content',
-      activePortfolio.avatar_url || '/avatar-its-araaaby.jpeg'
-    );
+    if (activePortfolio.avatar_url) {
+      setMeta('meta[property="og:image"]', 'content', activePortfolio.avatar_url);
+      setMeta('meta[name="twitter:image"]', 'content', activePortfolio.avatar_url);
+    }
     setMeta('meta[name="twitter:title"]', 'content', `${handle} | Portafolio de Redes Sociales`);
-    setMeta(
-      'meta[name="twitter:image"]',
-      'content',
-      activePortfolio.avatar_url || '/avatar-its-araaaby.jpeg'
-    );
-  }, [activePortfolio]);
+  }, [activePortfolio, currentView]);
 
   const handleUpdateDb = (nextDb) => {
     setDb(nextDb);
@@ -131,7 +163,7 @@ export default function App() {
     saveDatabase(db);
   };
 
-  // Restaurar exclusivamente los datos originales de @its.araaaby
+  // Restaurar datos originales del perfil principal
   const handleResetAraaabyDefault = () => {
     const nextPortfolios = db.portfolios.map((p) => {
       if (p.slug !== 'its.araaaby' && p.id !== 'portfolio-its-araaaby-001') return p;
@@ -161,7 +193,7 @@ export default function App() {
 
   const handleLogout = () => {
     handleSetSession(null);
-    setCurrentView('public');
+    setCurrentView('onboarding');
   };
 
   return (
