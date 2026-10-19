@@ -3,15 +3,6 @@ import { INITIAL_PORTFOLIO_DATA } from '../data/socialCatalog';
 const STORE_KEY = 'linkportfolio_prod_db_v2';
 const SESSION_KEY = 'linkportfolio_active_session_v2';
 
-/**
- * Credenciales por defecto configurables mediante variables de entorno (.env)
- * En producción (Vercel), puedes definir:
- * - VITE_ADMIN_EMAIL
- * - VITE_ADMIN_PASSWORD
- * - VITE_ARAAABY_OWNER_EMAIL
- * - VITE_ARAAABY_OWNER_PASSWORD
- * - VITE_GOOGLE_CLIENT_ID
- */
 export const DEFAULT_ADMIN_EMAIL =
   import.meta.env.VITE_ADMIN_EMAIL || 'admin@linkportfolio.app';
 export const DEFAULT_ADMIN_PASSWORD =
@@ -46,17 +37,16 @@ export function simpleHash(input) {
 }
 
 /**
- *Construye la base de datos inicial con el perfil protegido de @its.araaaby
- * y la cuenta de Super Administrador.
+ * Construye la base de datos inicial.
  */
 export function createInitialDatabase() {
-  const araaabyProfile = {
+  const initialProfile = {
     ...INITIAL_PORTFOLIO_DATA,
     id: 'portfolio-its-araaaby-001',
     slug: 'its.araaaby',
     owner_email: DEFAULT_ARAAABY_EMAIL.toLowerCase(),
     owner_password_hash: simpleHash(DEFAULT_ARAAABY_PASSWORD),
-    is_protected: true, // Impide eliminación accidental o reclamo por terceros
+    is_protected: true,
     created_at: '2026-10-18T22:00:00Z',
     updated_at: new Date().toISOString(),
   };
@@ -69,13 +59,10 @@ export function createInitialDatabase() {
       email: DEFAULT_ADMIN_EMAIL.toLowerCase(),
       password_hash: simpleHash(DEFAULT_ADMIN_PASSWORD),
     },
-    portfolios: [araaabyProfile],
+    portfolios: [initialProfile],
   };
 }
 
-/**
- * Carga la base de datos desde localStorage garantizando que el perfil principal @its.araaaby exista.
- */
 export function loadDatabase() {
   try {
     const raw = localStorage.getItem(STORE_KEY);
@@ -89,7 +76,7 @@ export function loadDatabase() {
       }
     }
   } catch {
-    // Si falla el parseo, inicializar base limpia
+    // Inicializar base limpia en caso de error
   }
   const initial = createInitialDatabase();
   saveDatabase(initial);
@@ -104,9 +91,6 @@ export function saveDatabase(db) {
   }
 }
 
-/**
- * Gestión de la sesión activa (aislamiento de permisos en producción).
- */
 export function loadActiveSession() {
   try {
     const raw = sessionStorage.getItem(SESSION_KEY) || localStorage.getItem(SESSION_KEY);
@@ -136,10 +120,6 @@ export function saveActiveSession(session) {
 
 /**
  * Verifica estrictamente si la sesión actual tiene permiso para editar un portafolio específico.
- * En producción:
- * - Visitantes sin sesión: NUNCA pueden editar ningún perfil.
- * - Usuarios estándar: SOLO pueden editar su propio portafolio (coincidencia de ID o email propietario).
- * - Super Administrador (role === 'ADMIN'): Puede añadir, modificar, actualizar o eliminar CUALQUIER perfil.
  */
 export function canEditPortfolio(session, portfolio) {
   if (!session || !portfolio) return false;
@@ -180,7 +160,7 @@ export function checkSlugAvailability(db, slugToCheck, currentPortfolioId = null
   if (existing) {
     return {
       available: false,
-      reason: existing.is_protected ? 'Protegido (En uso)' : 'Ocupado',
+      reason: 'No disponible',
       cleanSlug: clean,
     };
   }
@@ -241,7 +221,8 @@ export function createBlankPortfolio({ slug, email, password, displayName, avata
 
 /**
  * Carga dinámicamente el script oficial de Google Identity Services (OAuth 2.0)
- * y solicita autenticación de usuario con su cuenta de Google.
+ * e incluye triggers/eventos para detectar cuando el usuario cierra la ventana emergente
+ * sin seleccionar cuenta, evitando que el botón se quede cargando.
  */
 export function authenticateWithGoogleOAuth2(clientId) {
   return new Promise((resolve, reject) => {
@@ -254,18 +235,78 @@ export function authenticateWithGoogleOAuth2(clientId) {
       return;
     }
 
+    let settled = false;
+    let focusTimer = null;
+    let popupOpened = false;
+
+    const cleanupListeners = () => {
+      if (focusTimer) clearTimeout(focusTimer);
+      window.removeEventListener('focus', handleWindowFocus);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+
+    const safeResolve = (data) => {
+      if (settled) return;
+      settled = true;
+      cleanupListeners();
+      resolve(data);
+    };
+
+    const safeReject = (err) => {
+      if (settled) return;
+      settled = true;
+      cleanupListeners();
+      reject(err);
+    };
+
+    // Trigger de enfoque: cuando la ventana emergente de Google se cierra sin elegir cuenta,
+    // la ventana principal recupera el foco ('focus'). Damos 900ms de margen por si sí seleccionó cuenta;
+    // si no llegó respuesta de token, liberamos el botón inmediatamente.
+    const handleWindowFocus = () => {
+      if (!popupOpened || settled) return;
+      if (focusTimer) clearTimeout(focusTimer);
+      focusTimer = setTimeout(() => {
+        if (!settled) {
+          safeReject(
+            new Error('Se cerró la ventana de Google sin seleccionar una cuenta.')
+          );
+        }
+      }, 900);
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        handleWindowFocus();
+      }
+    };
+
     const initTokenFlow = () => {
       if (!window.google || !window.google.accounts || !window.google.accounts.oauth2) {
-        reject(new Error('No se pudo inicializar el cliente de Google OAuth 2.0.'));
+        safeReject(new Error('No se pudo inicializar el cliente de Google OAuth 2.0.'));
         return;
       }
 
       const tokenClient = window.google.accounts.oauth2.initTokenClient({
         client_id: clientId.trim(),
         scope: 'openid email profile',
+        // Callback nativo de error de Google Identity Services (ej. popup_closed / popup_failed_to_open)
+        error_callback: (err) => {
+          if (err && err.type === 'popup_closed') {
+            safeReject(
+              new Error('Se cerró la ventana emergente de Google sin iniciar sesión.')
+            );
+          } else {
+            safeReject(
+              new Error(
+                err?.message || 'Se canceló el inicio de sesión con Google.'
+              )
+            );
+          }
+        },
         callback: async (tokenResponse) => {
+          if (focusTimer) clearTimeout(focusTimer);
           if (tokenResponse.error) {
-            reject(new Error(`Error de Google OAuth: ${tokenResponse.error}`));
+            safeReject(new Error(`Cancelado o error de Google OAuth: ${tokenResponse.error}`));
             return;
           }
           try {
@@ -278,17 +319,26 @@ export function authenticateWithGoogleOAuth2(clientId) {
               throw new Error('No se pudo obtener el perfil de usuario de Google.');
             }
             const profile = await res.json();
-            resolve({
+            safeResolve({
               email: (profile.email || '').toLowerCase(),
               name: profile.name || profile.given_name || 'Usuario Google',
               picture: profile.picture || '',
               sub: profile.sub,
             });
           } catch (err) {
-            reject(err);
+            safeReject(err);
           }
         },
       });
+
+      // Registrar eventos para monitorear la ventana emergente
+      window.addEventListener('focus', handleWindowFocus);
+      document.addEventListener('visibilitychange', handleVisibilityChange);
+
+      // Marcar que la ventana emergente fue abierta tras un breve instante
+      setTimeout(() => {
+        popupOpened = true;
+      }, 400);
 
       tokenClient.requestAccessToken({ prompt: 'select_account' });
     };
@@ -304,14 +354,15 @@ export function authenticateWithGoogleOAuth2(clientId) {
       return;
     }
 
-    const script = document.createElement('script');
-    script.id = 'google-gsi-client-script';
-    script.src = 'https://accounts.google.com/gsi/client';
-    script.async = true;
-    script.defer = true;
-    script.onload = initTokenFlow;
-    script.onerror = () =>
-      reject(new Error('Error de red al cargar Google Identity Services (gsi/client).'));
-    document.head.appendChild(script);
+    const script = document.getElementById('google-gsi-client-script');
+    const newScript = document.createElement('script');
+    newScript.id = 'google-gsi-client-script';
+    newScript.src = 'https://accounts.google.com/gsi/client';
+    newScript.async = true;
+    newScript.defer = true;
+    newScript.onload = initTokenFlow;
+    newScript.onerror = () =>
+      safeReject(new Error('Error de red al cargar Google Identity Services (gsi/client).'));
+    document.head.appendChild(newScript);
   });
 }
