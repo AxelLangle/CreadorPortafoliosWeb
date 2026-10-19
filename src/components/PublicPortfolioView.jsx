@@ -3,12 +3,12 @@ import { getActivePortfolioLinks } from '../data/socialCatalog';
 
 /**
  * Pantalla 3: Vista Pública del Portafolio (Experiencia del Visitante)
- * Soporta Variación 3A (Modo Fondo Negro #000000) y Variación 3B (Modo Foto Personalizada con Glassmorphism)
- * Basado en los mockups de Google Stitch AI ("LinkPortfolio Mobile Onboarding").
+ * En producción: 100% limpia y bloqueada contra ediciones de visitantes no autenticados.
  */
 export default function PublicPortfolioView({
   portfolio,
   isSimulator = false,
+  canEdit = false,
   onNavigate,
 }) {
   const activeLinks = getActivePortfolioLinks(portfolio);
@@ -33,21 +33,31 @@ export default function PublicPortfolioView({
           <span className="material-symbols-outlined text-[32px]">lock_clock</span>
         </div>
         <h1 className="font-headline-md text-headline-md text-primary mb-2">
-          Portafolio en Modo Borrador
+          Portafolio en Mantenimiento
         </h1>
         <p className="font-body-md text-body-md text-on-surface-variant max-w-sm mb-6">
           El portafolio <span className="text-primary font-mono">{formattedHandle}</span> se
-          encuentra temporalmente oculto por su creador.
+          encuentra temporalmente privado.
         </p>
-        {onNavigate && (
+        {canEdit && onNavigate ? (
           <button
             type="button"
             onClick={() => onNavigate('settings')}
             className="h-11 px-5 rounded-xl bg-primary text-on-primary font-label-lg text-label-lg font-semibold flex items-center gap-2 hover:opacity-90 transition-all"
           >
             <span className="material-symbols-outlined text-[18px]">tune</span>
-            <span>Ir a Configuración para Activar</span>
+            <span>Reactivar desde Configuración</span>
           </button>
+        ) : (
+          onNavigate && (
+            <button
+              type="button"
+              onClick={() => onNavigate('onboarding')}
+              className="h-10 px-4 rounded-xl bg-surface-container-low text-outline hover:text-primary font-label-sm text-label-sm transition-colors"
+            >
+              Acceso Propietario
+            </button>
+          )
         )}
       </div>
     );
@@ -112,7 +122,6 @@ export default function PublicPortfolioView({
 
         {/* Cabecera del Perfil + Contenedor de Redes Sociales */}
         <main className="w-full flex flex-col items-center gap-6 my-auto py-4">
-          {/* Cabecera del Perfil */}
           <header className="flex flex-col items-center text-center w-full">
             <div className="relative group">
               <div
@@ -131,14 +140,12 @@ export default function PublicPortfolioView({
                 </div>
               </div>
 
-              {/* Indicador de pulso activo en vivo (Stitch 3A) */}
               <span className="absolute bottom-1 right-1 z-20 flex h-3.5 w-3.5 items-center justify-center">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-secondary opacity-75" />
                 <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-secondary shadow-sm" />
               </span>
             </div>
 
-            {/* Nombre o alias del usuario */}
             <div className="mt-3.5 flex items-center justify-center gap-1.5">
               <h1
                 className={`font-headline-sm text-headline-sm tracking-tight ${
@@ -156,7 +163,6 @@ export default function PublicPortfolioView({
               </span>
             </div>
 
-            {/* Subtítulo / Biografía opcional */}
             {portfolio.bio && (
               <p
                 className={`font-body-sm text-body-sm mt-1 max-w-[300px] ${
@@ -228,19 +234,24 @@ export default function PublicPortfolioView({
           </nav>
         </main>
 
-        {/* Pie de página discreto (Stitch 3A y 3B) */}
+        {/* Pie de página discreto (en producción redirige a Inicio de Sesión si no está autenticado) */}
         <footer className="w-full pt-8 pb-2 flex flex-col items-center gap-2">
           {onNavigate ? (
             <button
               type="button"
-              onClick={() => onNavigate('editor')}
+              onClick={() => onNavigate(canEdit ? 'editor' : 'onboarding')}
               className={`inline-flex items-center gap-1.5 transition-colors text-label-sm font-label-sm uppercase tracking-wider cursor-pointer ${
                 isImageMode
-                  ? 'text-white/50 hover:text-white/90'
+                  ? 'text-white/40 hover:text-white/80'
                   : 'text-outline-variant hover:text-on-surface-variant'
               }`}
+              title={
+                canEdit
+                  ? 'Ir al editor de tu portafolio'
+                  : 'Iniciar sesión o crear tu propio LinkPortfolio'
+              }
             >
-              <span className="material-symbols-outlined text-[14px]">link</span>
+              <span className="material-symbols-outlined text-[13px]">link</span>
               <span>Creado con LinkPortfolio</span>
             </button>
           ) : (
@@ -249,7 +260,7 @@ export default function PublicPortfolioView({
                 isImageMode ? 'text-white/45' : 'text-outline-variant'
               }`}
             >
-              <span className="material-symbols-outlined text-[14px]">link</span>
+              <span className="material-symbols-outlined text-[13px]">link</span>
               <span>Creado con LinkPortfolio</span>
             </div>
           )}
