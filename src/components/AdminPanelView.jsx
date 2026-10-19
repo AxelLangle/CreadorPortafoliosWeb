@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   simpleHash,
   checkSlugAvailability,
@@ -9,8 +9,8 @@ import { getActivePortfolioLinks } from '../data/socialCatalog';
 
 /**
  * Panel Exclusivo de Super Administrador con protección estricta por contraseña.
- * Permite Añadir, Modificar, Actualizar y Eliminar cualquier perfil de la plataforma,
- * proteger el perfil de @its.araaaby y configurar Google OAuth 2.0.
+ * Permite Añadir, Modificar, Actualizar y Eliminar cualquier perfil de la plataforma
+ * y configurar Google OAuth 2.0.
  */
 export default function AdminPanelView({
   db,
@@ -19,10 +19,8 @@ export default function AdminPanelView({
   onSetSession,
   onOpenProfileInEditor,
   onPreviewProfile,
-  onResetAraaabyDefault,
   onNavigate,
 }) {
-  // Estados para la puerta de autenticación del Administrador
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
   const [showLoginPwd, setShowLoginPwd] = useState(false);
@@ -30,10 +28,10 @@ export default function AdminPanelView({
   const [failedAttempts, setFailedAttempts] = useState(0);
   const [lockoutUntil, setLockoutUntil] = useState(0);
 
-  // Estados internos del Dashboard Admin
   const [activeSection, setActiveSection] = useState('profiles'); // 'profiles' | 'oauth' | 'security'
   const [searchQuery, setSearchQuery] = useState('');
   const [notice, setNotice] = useState('');
+  const [testingOAuth, setTestingOAuth] = useState(false);
 
   // Modal: Crear nuevo perfil
   const [createModalOpen, setCreateModalOpen] = useState(false);
@@ -57,6 +55,23 @@ export default function AdminPanelView({
   const [oauthClientIdDraft, setOauthClientIdDraft] = useState(db.google_client_id || '');
   const [adminEmailDraft, setAdminEmailDraft] = useState(db.admin_config?.email || '');
   const [adminNewPwdDraft, setAdminNewPwdDraft] = useState('');
+
+  // Trigger para liberar estado de prueba OAuth si se cierra la ventana emergente
+  useEffect(() => {
+    if (!testingOAuth) return undefined;
+    let timer = null;
+    const onFocus = () => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => {
+        setTestingOAuth(false);
+      }, 900);
+    };
+    window.addEventListener('focus', onFocus);
+    return () => {
+      if (timer) clearTimeout(timer);
+      window.removeEventListener('focus', onFocus);
+    };
+  }, [testingOAuth]);
 
   const isAdminAuthenticated = session && session.role === 'ADMIN';
 
@@ -100,18 +115,17 @@ export default function AdminPanelView({
     }
   };
 
-  // ==================== VISTA DE BLOQUEO SI NO ES ADMINISTRADOR ====================
   if (!isAdminAuthenticated) {
     return (
       <div className="min-h-screen bg-surface text-on-surface flex flex-col justify-between p-4">
         <header className="max-w-md w-full mx-auto pt-4 flex items-center justify-between">
           <button
             type="button"
-            onClick={() => onNavigate('public')}
+            onClick={() => onNavigate('onboarding')}
             className="h-10 px-3 rounded-xl bg-surface-container-low hover:bg-surface-container-high text-on-surface-variant hover:text-primary flex items-center gap-1.5 font-label-md text-label-md transition-colors"
           >
             <span className="material-symbols-outlined text-[18px]">arrow_back</span>
-            <span>Volver al Portafolio</span>
+            <span>Volver al Inicio</span>
           </button>
 
           <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-error-container/30 text-error font-label-sm text-label-sm uppercase tracking-wider">
@@ -132,8 +146,8 @@ export default function AdminPanelView({
                 Panel de Super Administrador
               </h1>
               <p className="font-body-sm text-body-sm text-on-surface-variant mt-1">
-                Área exclusiva protegida por contraseña para administrar todos los perfiles de
-                LinkPortfolio (incluyendo <span className="text-primary">@its.araaaby</span>).
+                Área exclusiva protegida por contraseña para administrar todos los perfiles
+                registrados en LinkPortfolio.
               </p>
             </div>
 
@@ -219,7 +233,6 @@ export default function AdminPanelView({
     );
   }
 
-  // ==================== FUNCIONES CRUD DEL SUPER ADMINISTRADOR ====================
   const portfolios = db.portfolios || [];
   const filteredPortfolios = portfolios.filter((p) => {
     const q = searchQuery.trim().toLowerCase();
@@ -233,7 +246,6 @@ export default function AdminPanelView({
 
   const newSlugCheck = checkSlugAvailability(db, newSlug);
 
-  // 1. Añadir nuevo perfil
   const handleCreateProfile = (e) => {
     e.preventDefault();
     if (!newSlugCheck.available) return;
@@ -260,7 +272,6 @@ export default function AdminPanelView({
     setNotice(`Perfil @${created.slug} creado exitosamente.`);
   };
 
-  // 2. Actualizar metadatos/credenciales de cualquier perfil
   const handleSaveMetaProfile = (e) => {
     e.preventDefault();
     if (!editMetaProfile) return;
@@ -299,12 +310,11 @@ export default function AdminPanelView({
     setNotice(`Credenciales y configuración de @${slugCheck.cleanSlug} actualizadas.`);
   };
 
-  // 3. Eliminar cualquier perfil (con validación de candado is_protected)
   const handleConfirmDeleteProfile = () => {
     if (!deleteTarget) return;
     if (deleteTarget.is_protected) {
       setNotice(
-        `El perfil @${deleteTarget.slug} está protegido contra eliminación. Desactiva primero el candado en "Credenciales" si realmente deseas eliminarlo.`
+        `El perfil @${deleteTarget.slug} está protegido contra eliminación. Desactiva primero el candado en "Credenciales" si deseas eliminarlo.`
       );
       setDeleteTarget(null);
       return;
@@ -328,7 +338,6 @@ export default function AdminPanelView({
     setDeleteTarget(null);
   };
 
-  // Alternar estado publicado/borrador de cualquier perfil
   const handleTogglePublishProfile = (portfolioId) => {
     const updated = portfolios.map((p) =>
       p.id === portfolioId ? { ...p, is_published: !p.is_published } : p
@@ -336,15 +345,8 @@ export default function AdminPanelView({
     onUpdateDb({ ...db, portfolios: updated });
   };
 
-  // Fijar como portafolio principal en la raíz (/)
-  const handleSetDefaultSlug = (slug) => {
-    onUpdateDb({ ...db, default_slug: slug });
-    setNotice(`Ahora @${slug} es el portafolio principal que se muestra al entrar a la raíz.`);
-  };
-
   return (
     <div className="min-h-screen bg-surface text-on-surface flex flex-col pb-24">
-      {/* Cabecera Superior de Super Administrador */}
       <header className="sticky top-0 z-40 bg-surface/90 backdrop-blur-xl border-b border-outline-variant/25">
         <div className="max-w-6xl mx-auto h-16 px-4 sm:px-6 flex items-center justify-between gap-3">
           <div className="flex items-center gap-3">
@@ -371,18 +373,9 @@ export default function AdminPanelView({
           <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={() => onNavigate('public')}
-              className="h-9 px-3 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface font-label-md text-label-md flex items-center gap-1.5 transition-colors"
-            >
-              <span className="material-symbols-outlined text-[16px]">public</span>
-              <span className="hidden sm:inline">Ver Vista Pública</span>
-            </button>
-
-            <button
-              type="button"
               onClick={() => {
                 onSetSession(null);
-                onNavigate('public');
+                onNavigate('onboarding');
               }}
               className="h-9 px-3 rounded-lg bg-error-container/30 hover:bg-error-container/50 text-error font-label-md text-label-md flex items-center gap-1.5 transition-colors"
             >
@@ -426,14 +419,14 @@ export default function AdminPanelView({
 
           <div className="bg-surface-container-low border border-outline-variant/20 rounded-2xl p-4">
             <span className="font-label-sm text-label-sm text-outline uppercase">
-              Portafolio Raíz (/)
+              Perfiles Protegidos
             </span>
-            <div className="font-headline-sm text-headline-sm text-primary mt-1 truncate">
-              @{db.default_slug}
+            <div className="font-headline-lg text-headline-lg text-primary mt-1">
+              {portfolios.filter((p) => p.is_protected).length}
             </div>
             <span className="font-body-sm text-body-sm text-secondary flex items-center gap-1">
               <span className="material-symbols-outlined text-[14px]">verified_user</span>
-              Protegido contra terceros
+              Candado activo
             </span>
           </div>
 
@@ -527,7 +520,6 @@ export default function AdminPanelView({
         {/* ==================== SECCIÓN 1: LISTADO Y CRUD DE PERFILES ==================== */}
         {activeSection === 'profiles' && (
           <div className="flex flex-col gap-4">
-            {/* Buscador */}
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
               <div className="relative flex-1 max-w-md">
                 <span className="material-symbols-outlined absolute left-3.5 top-2.5 text-outline text-[20px]">
@@ -541,29 +533,11 @@ export default function AdminPanelView({
                   className="w-full h-10 pl-10 pr-4 rounded-xl bg-surface-container-low border border-outline-variant/25 text-primary font-body-sm text-body-sm outline-none focus:border-primary"
                 />
               </div>
-
-              <button
-                type="button"
-                onClick={() => {
-                  onResetAraaabyDefault();
-                  setNotice(
-                    'Se restauraron los enlaces e imagen original del perfil @its.araaaby.'
-                  );
-                }}
-                className="h-10 px-3.5 rounded-xl bg-surface-container-low hover:bg-surface-container-high border border-outline-variant/25 text-on-surface-variant hover:text-primary font-label-md text-label-md flex items-center justify-center gap-1.5 transition-colors"
-              >
-                <span className="material-symbols-outlined text-[17px] text-secondary">
-                  restore
-                </span>
-                <span>Restaurar datos de @its.araaaby</span>
-              </button>
             </div>
 
-            {/* Tarjetas de Perfiles */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {filteredPortfolios.map((profile) => {
                 const activeLinks = getActivePortfolioLinks(profile);
-                const isRootDefault = db.default_slug === profile.slug;
 
                 return (
                   <div
@@ -573,7 +547,7 @@ export default function AdminPanelView({
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex items-center gap-3.5 min-w-0">
                         <img
-                          src={profile.avatar_url || '/avatar-its-araaaby.jpeg'}
+                          src={profile.avatar_url}
                           alt={profile.slug}
                           className="w-14 h-14 rounded-full object-cover ring-2 ring-primary/20 shrink-0"
                         />
@@ -582,11 +556,6 @@ export default function AdminPanelView({
                             <h3 className="font-headline-sm text-headline-sm text-primary truncate">
                               @{profile.slug}
                             </h3>
-                            {isRootDefault && (
-                              <span className="px-2 py-0.5 rounded-full bg-secondary/20 text-secondary font-label-sm text-label-sm">
-                                Principal (/)
-                              </span>
-                            )}
                             {profile.is_protected && (
                               <span
                                 className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full bg-surface-container-highest text-primary font-label-sm text-label-sm"
@@ -603,13 +572,11 @@ export default function AdminPanelView({
                             Propietario: <span className="text-primary">{profile.owner_email}</span>
                           </p>
                           <p className="font-body-sm text-body-sm text-outline mt-0.5">
-                            {activeLinks.length} enlaces activos • Fondo:{' '}
-                            {profile.background_type === 'IMAGE' ? 'Foto' : 'Negro #000000'}
+                            {activeLinks.length} enlaces activos • Ruta: /{profile.slug}
                           </p>
                         </div>
                       </div>
 
-                      {/* Switch Publicado / Borrador */}
                       <button
                         type="button"
                         onClick={() => handleTogglePublishProfile(profile.id)}
@@ -623,7 +590,6 @@ export default function AdminPanelView({
                       </button>
                     </div>
 
-                    {/* Botones de Acción CRUD sobre el Perfil */}
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2 border-t border-outline-variant/15">
                       <button
                         type="button"
@@ -667,16 +633,6 @@ export default function AdminPanelView({
                         <span>Eliminar</span>
                       </button>
                     </div>
-
-                    {!isRootDefault && (
-                      <button
-                        type="button"
-                        onClick={() => handleSetDefaultSlug(profile.slug)}
-                        className="text-left font-label-sm text-label-sm text-outline hover:text-secondary transition-colors"
-                      >
-                        ☆ Establecer @{profile.slug} como portafolio principal al abrir el sitio
-                      </button>
-                    )}
                   </div>
                 );
               })}
@@ -741,6 +697,7 @@ export default function AdminPanelView({
               <button
                 type="button"
                 onClick={async () => {
+                  setTestingOAuth(true);
                   try {
                     const user = await authenticateWithGoogleOAuth2(oauthClientIdDraft.trim());
                     setNotice(
@@ -748,11 +705,17 @@ export default function AdminPanelView({
                     );
                   } catch (err) {
                     setNotice(err.message);
+                  } finally {
+                    setTestingOAuth(false);
                   }
                 }}
                 className="h-11 px-4 rounded-xl bg-surface-container-high hover:bg-surface-container-highest text-on-surface font-label-md text-label-md flex items-center gap-2"
               >
-                <span>Probar Popup de Google OAuth 2.0</span>
+                <span>
+                  {testingOAuth
+                    ? 'Esperando ventana de Google...'
+                    : 'Probar Popup de Google OAuth 2.0'}
+                </span>
               </button>
             </div>
 
@@ -762,18 +725,17 @@ export default function AdminPanelView({
               </h4>
               <ul className="list-disc list-inside font-body-sm text-body-sm text-on-surface-variant space-y-1.5">
                 <li>
-                  Cuando tu esposa inicie sesión con Google usando el correo asignado como
-                  propietario de <strong className="text-primary">@its.araaaby</strong>, entrará
-                  directamente al editor de su portafolio.
+                  Cuando un usuario inicia sesión con Google usando el correo asignado como
+                  propietario de un portafolio, entrará directamente al editor de su propio perfil.
                 </li>
                 <li>
-                  Si cualquier otra persona inicia sesión con Google, el sistema verificará que{' '}
-                  <strong>no</strong> es propietaria de <strong className="text-primary">@its.araaaby</strong> y le creará su propio portafolio independiente sin poder tocar ningún otro perfil.
+                  Si un usuario nuevo inicia sesión con Google, el sistema le creará un portafolio
+                  independiente sin poder modificar ningún otro perfil existente.
                 </li>
                 <li>
-                  Si tú inicias sesión con Google usando el correo configurado como{' '}
+                  Si inicias sesión con Google usando el correo configurado como{' '}
                   <strong className="text-secondary">Super Administrador</strong>, tendrás acceso
-                  total a esta consola y a todos los perfiles.
+                  directo a esta consola y a todos los perfiles.
                 </li>
               </ul>
             </div>
