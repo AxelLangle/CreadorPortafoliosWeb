@@ -1,18 +1,17 @@
-# LinkPortfolio — Herramienta de Creación de Portafolios Web (`@its.araaaby`)
+# LinkPortfolio — Herramienta de Creación de Portafolios Web
 
-Plataforma web minimalista estilo **Link-in-Bio** preparada para **producción**, diseñada bajo el sistema de diseño **Obsidian Bio** (generado con **Google Stitch AI** en el proyecto *"LinkPortfolio Mobile Onboarding"*). Cuenta con **aislamiento estricto entre cuentas**, **protección dedicada para el perfil `@its.araaaby`**, **inicio de sesión real con Google OAuth 2.0** y una **Consola Exclusiva de Super Administrador** protegida por contraseña.
+Plataforma web minimalista estilo **Link-in-Bio** preparada para **producción**, diseñada bajo el sistema de diseño **Obsidian Bio** (generado con **Google Stitch AI** en el proyecto *"LinkPortfolio Mobile Onboarding"*). Cuenta con **aislamiento estricto entre cuentas**, **inicio de sesión directo en la ruta raíz (`/`)**, **autenticación con Google OAuth 2.0** (con detección reactiva de cierre de ventana emergente) y una **Consola Exclusiva de Super Administrador** protegida por contraseña.
 
 ---
 
 ## Tabla de Contenidos
 
 1. [Resumen Ejecutivo y Pilares Visuales](#1-resumen-ejecutivo-y-pilares-visuales)
-2. [Seguridad en Producción y Aislamiento de Cuentas](#2-seguridad-en-producción-y-aislamiento-de-cuentas)
+2. [Enrutamiento y Seguridad en Producción](#2-enrutamiento-y-seguridad-en-producción)
 3. [Consola Exclusiva de Super Administrador (`/admin`)](#3-consola-exclusiva-de-super-administrador-admin)
 4. [Configuración de Inicio de Sesión con Google (OAuth 2.0)](#4-configuración-de-inicio-de-sesión-con-google-oauth-20)
 5. [Catálogo Oficial de las 7 Redes Sociales](#5-catálogo-oficial-de-las-7-redes-sociales)
-6. [Primer Portafolio Configurado y Protegido: `@its.araaaby`](#6-primer-portafolio-configurado-y-protegido-itsaraaaby)
-7. [Instalación, Variables de Entorno y Despliegue en Vercel](#7-instalación-variables-de-entorno-y-despliegue-en-vercel)
+6. [Instalación, Variables de Entorno y Despliegue en Vercel](#6-instalación-variables-de-entorno-y-despliegue-en-vercel)
 
 ---
 
@@ -28,47 +27,42 @@ A diferencia de otras herramientas saturadas de bloques complejos, **LinkPortfol
 
 ---
 
-## 2. Seguridad en Producción y Aislamiento de Cuentas
+## 2. Enrutamiento y Seguridad en Producción
 
-Para garantizar que ningún visitante pueda modificar perfiles ajenos cuando el proyecto esté desplegado en producción:
-
-- **Vista Pública 100% Limpia y Bloqueada:** Cualquier persona que entre al enlace público (`/` o `/its.araaaby` o `/?u=its.araaaby`) verá **únicamente** el portafolio público de `@its.araaaby` sin ningún botón de edición ni controles de configuración.
-- **Protección Especial sobre `@its.araaaby` (`is_protected: true`):**
-  - El identificador `its.araaaby` está bloqueado contra reclamos de terceros en el formulario de registro.
-  - Cuenta con un candado contra eliminación accidental incluso dentro del panel administrativo.
-  - Solo puede ser editado iniciando sesión con las credenciales de su propietaria o desde la cuenta del **Super Administrador**.
-- **Aislamiento Multi-Cuenta:** Si un usuario externo crea una cuenta nueva o inicia sesión con su propia cuenta de Google, el sistema le genera un portafolio independiente bajo su propio `slug` sin tener acceso ni visibilidad de edición sobre `@its.araaaby` ni sobre otros perfiles.
+- **Ruta Raíz (`/`) Directa a Inicio de Sesión y Registro:** Al visitar el dominio principal (`/`), la aplicación presenta directamente la pantalla de **Iniciar Sesión o Crear Cuenta**, sin exponer ni mencionar ningún perfil preexistente.
+- **Rutas Públicas de Perfiles (`/<slug>` o `/?u=<slug>`):** Cualquier visitante que ingrese a la URL pública de un portafolio activo verá únicamente el perfil público limpio sin botones de edición ni controles administrativos.
+- **Aislamiento Multi-Cuenta y Perfiles Protegidos (`is_protected: true`):**
+  - Cada cuenta registrada únicamente tiene permisos sobre su propio portafolio.
+  - Los perfiles con candado de protección activo no pueden ser reclamados ni eliminados por terceros.
 
 ---
 
 ## 3. Consola Exclusiva de Super Administrador (`/admin`)
 
-Accede entrando a `/admin` o `/?mode=admin` (o desde el botón **Admin** en la pantalla de inicio de sesión).
+Accede entrando a `/admin` o `/?mode=admin` (o desde el botón **Admin** en la cabecera).
 
 - **Bloqueo Estricto por Contraseña:** Requiere el correo del administrador y la contraseña maestra (con protección contra fuerza bruta que bloquea temporalmente el acceso tras 5 intentos fallidos).
 - **Funciones CRUD Completas sobre Todos los Perfiles:**
   1. **Añadir (`+ Añadir Nuevo Perfil`):** Crea portafolios nuevos definiendo su `slug`, nombre visible, correo del propietario, contraseña y candado de protección.
   2. **Modificar Diseño y Redes (`Modificar`):** Abre cualquier perfil del sistema dentro del **Editor Completo** (Foto 1:1, Fondo, Oscurecimiento y las 7 Redes Sociales con múltiples perfiles).
   3. **Actualizar Credenciales y Ruta (`Credenciales`):** Cambia el `slug`, el correo autorizado (para Login y Google OAuth 2.0), la contraseña del propietario o el estado del candado de protección.
-  4. **Eliminar (`Eliminar`):** Permite borrar perfiles con confirmación de seguridad (impidiendo borrar perfiles con candado activo como `@its.araaaby` a menos que se desbloquee explícitamente).
-  5. **Portafolio Principal de Raíz (`/`):** Permite elegir qué perfil se muestra por defecto en el dominio principal (configurado por defecto en `@its.araaaby`).
+  4. **Eliminar (`Eliminar`):** Permite borrar perfiles con confirmación de seguridad (impidiendo borrar perfiles con candado activo a menos que se desbloquee explícitamente).
 
 ---
 
 ## 4. Configuración de Inicio de Sesión con Google (OAuth 2.0)
 
-El proyecto integra el SDK oficial **Google Identity Services (OAuth 2.0)** (`https://accounts.google.com/gsi/client`). Para activarlo con tu propio proyecto de Google Cloud:
+El proyecto integra el SDK oficial **Google Identity Services (OAuth 2.0)** (`https://accounts.google.com/gsi/client`) e incluye un **monitor de foco y estado de ventana emergente** (`error_callback` + eventos `window.focus` y `visibilitychange`) que restablece automáticamente el botón si el usuario cierra el popup sin elegir cuenta.
+
+Para activarlo con tu proyecto de Google Cloud:
 
 1. Entra a [Google Cloud Console — Credentials](https://console.cloud.google.com/apis/credentials).
-2. Crea un proyecto (o selecciona uno existente) y ve a **Pantalla de consentimiento de OAuth** (*OAuth consent screen*), eligiendo tipo **Externo** (*External*).
-3. Ve a **Credenciales** → **+ Crear credenciales** → **ID de cliente de OAuth** (*OAuth client ID*).
-4. En **Tipo de aplicación**, selecciona **Aplicación web** (*Web application*).
-5. En **Orígenes de JavaScript autorizados** (*Authorized JavaScript origins*), agrega:
-   - `http://localhost:5173` (para pruebas locales)
-   - `https://tu-dominio.vercel.app` (el dominio que te asigne Vercel al desplegar)
-6. Copia el **ID de cliente** generado (`xxxx.apps.googleusercontent.com`) y configúralo de cualquiera de estas dos formas:
-   - **En Vercel / `.env`:** En la variable `VITE_GOOGLE_CLIENT_ID=xxxx.apps.googleusercontent.com`.
-   - **Desde el Panel de Administrador (`/admin`):** En la pestaña **Google OAuth 2.0**, pégalo y haz clic en **Guardar Client ID**.
+2. Crea un proyecto (o selecciona uno existente) y configura la **Pantalla de consentimiento de OAuth** (*OAuth consent screen*).
+3. Ve a **Credenciales** → **+ Crear credenciales** → **ID de cliente de OAuth** (*OAuth client ID*) de tipo **Aplicación web**.
+4. En **Orígenes de JavaScript autorizados** (*Authorized JavaScript origins*), agrega:
+   - `http://localhost:5173` (para desarrollo local)
+   - `https://tu-dominio.vercel.app` (el dominio de producción)
+5. Copia el **ID de cliente** generado (`xxxx.apps.googleusercontent.com`) y configúralo en `VITE_GOOGLE_CLIENT_ID` o desde `/admin` en la pestaña **Google OAuth 2.0**.
 
 ---
 
@@ -86,21 +80,7 @@ El proyecto integra el SDK oficial **Google Identity Services (OAuth 2.0)** (`ht
 
 ---
 
-## 6. Primer Portafolio Configurado y Protegido: `@its.araaaby`
-
-- **Identificador de usuario (`slug`):** `its.araaaby` (Portafolio principal en `/`)
-- **Foto de perfil:** `/public/avatar-its-araaaby.jpeg`
-- **Redes Sociales Activas:**
-  - **Facebook:** `https://www.facebook.com/share/1C7WpHJvRK/?mibextid=wwXIfr`
-  - **Instagram personal:** `https://www.instagram.com/its.araaaby?vrfl=cDFzMm1jb2N3Ynpo&utm_source=qr`
-  - **Ig Coach:** `https://www.instagram.com/afit.araa?psln=MTQ2ODB4Ymc1NTUxYw%3D%3D&utm_source=qr`
-  - **Ig Nails:** `https://www.instagram.com/araaanails_?cplk=MXhtbWdvZWNnZjhwOA%3D%3D&utm_source=qr`
-  - **X:** `https://x.com/diaz37586?s=11`
-  - **Threads:** `https://www.threads.com/@araaa.by_?igshid=NTc4MTIwNjQ2YQ==`
-
----
-
-## 7. Instalación, Variables de Entorno y Despliegue en Vercel
+## 6. Instalación, Variables de Entorno y Despliegue en Vercel
 
 ```bash
 # 1. Instalar dependencias
@@ -116,8 +96,7 @@ npm run dev
 npm run build
 ```
 
-### Despliegue Rápido en Vercel (Recomendado para Producción 24/7)
-1. Entra a [vercel.com](https://vercel.com/) e inicia sesión con tu cuenta de GitHub.
-2. Haz clic en **"Add New..." → "Project"** e importa el repositorio `AxelLangle/CreadorPortafoliosWeb`.
-3. En la sección **Environment Variables**, agrega tus variables (`VITE_ADMIN_EMAIL`, `VITE_ADMIN_PASSWORD`, `VITE_ARAAABY_OWNER_EMAIL`, `VITE_ARAAABY_OWNER_PASSWORD`, `VITE_GOOGLE_CLIENT_ID`).
-4. Haz clic en **Deploy**. En menos de 60 segundos tendrás tu URL pública con HTTPS lista para colocar en la biografía de las redes sociales de `@its.araaaby`.
+### Despliegue en Vercel
+1. Entra a [vercel.com](https://vercel.com/) e importa el repositorio `AxelLangle/CreadorPortafoliosWeb`.
+2. Configura las variables de entorno definidas en `.env.example`.
+3. Haz clic en **Deploy** para obtener tu URL pública con HTTPS.
