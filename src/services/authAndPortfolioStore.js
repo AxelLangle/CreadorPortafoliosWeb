@@ -1,4 +1,4 @@
-import { INITIAL_PORTFOLIO_DATA } from '../data/socialCatalog';
+import { INITIAL_PORTFOLIO_DATA, DEFAULT_NEUTRAL_AVATAR } from '../data/socialCatalog';
 
 const STORE_KEY = 'linkportfolio_prod_db_v2';
 const SESSION_KEY = 'linkportfolio_active_session_v2';
@@ -47,6 +47,8 @@ export function createInitialDatabase() {
     owner_email: DEFAULT_ARAAABY_EMAIL.toLowerCase(),
     owner_password_hash: simpleHash(DEFAULT_ARAAABY_PASSWORD),
     is_protected: true,
+    has_custom_background: false,
+    background_image_url: '',
     created_at: '2026-10-18T22:00:00Z',
     updated_at: new Date().toISOString(),
   };
@@ -71,6 +73,33 @@ export function loadDatabase() {
       if (parsed && Array.isArray(parsed.portfolios) && parsed.portfolios.length > 0) {
         if (ENV_GOOGLE_CLIENT_ID && !parsed.google_client_id) {
           parsed.google_client_id = ENV_GOOGLE_CLIENT_ID;
+        }
+        // Normalizar portafolios para que ninguno use por error la foto de otro perfil como fondo
+        let migrated = false;
+        parsed.portfolios = parsed.portfolios.map((p) => {
+          const nextP = { ...p };
+          if (nextP.slug !== 'its.araaaby' && nextP.avatar_url === '/avatar-its-araaaby.jpeg') {
+            nextP.avatar_url = DEFAULT_NEUTRAL_AVATAR;
+            migrated = true;
+          }
+          if (
+            nextP.background_image_url === '/avatar-its-araaaby.jpeg' ||
+            nextP.background_image_url === nextP.avatar_url
+          ) {
+            nextP.background_image_url = '';
+            nextP.background_image_name = '';
+            nextP.has_custom_background = false;
+            migrated = true;
+          } else if (typeof nextP.has_custom_background !== 'boolean') {
+            nextP.has_custom_background = Boolean(
+              nextP.background_image_url && nextP.background_image_url.trim() !== ''
+            );
+            migrated = true;
+          }
+          return nextP;
+        });
+        if (migrated) {
+          saveDatabase(parsed);
         }
         return parsed;
       }
@@ -197,10 +226,9 @@ export function createBlankPortfolio({ slug, email, password, displayName, avata
     is_protected: false,
     display_name: displayName || `@${cleanSlug}`,
     bio: 'Mi portafolio oficial de redes sociales',
-    avatar_url:
-      avatarUrl ||
-      'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=300&auto=format&fit=crop&q=80',
+    avatar_url: avatarUrl || DEFAULT_NEUTRAL_AVATAR,
     background_type: 'BLACK',
+    has_custom_background: false,
     background_image_url: '',
     background_image_name: '',
     background_image_meta: '',
