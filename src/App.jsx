@@ -132,6 +132,15 @@ export default function App() {
     setMeta('meta[name="twitter:title"]', 'content', `${handle} | Portafolio de Redes Sociales`);
   }, [activePortfolio, currentView]);
 
+  // Sincronizar cambios en tiempo real entre pestañas (ej. cuando la vista pública está abierta en otra pestaña)
+  useEffect(() => {
+    const handleStorageSync = () => {
+      setDb(loadDatabase());
+    };
+    window.addEventListener('storage', handleStorageSync);
+    return () => window.removeEventListener('storage', handleStorageSync);
+  }, []);
+
   const handleUpdateDb = (nextDb) => {
     setDb(nextDb);
     saveDatabase(nextDb);
@@ -145,16 +154,19 @@ export default function App() {
   // Actualizar únicamente el portafolio activo (solo si el usuario tiene permiso)
   const handleUpdateActivePortfolio = (updatedPortfolio) => {
     if (!canEditPortfolio(session, activePortfolio)) return;
-    const nextPortfolios = db.portfolios.map((p) =>
-      p.id === updatedPortfolio.id
-        ? { ...updatedPortfolio, updated_at: new Date().toISOString() }
-        : p
-    );
-    const nextDb = {
-      ...db,
-      portfolios: nextPortfolios,
-    };
-    handleUpdateDb(nextDb);
+    setDb((prevDb) => {
+      const nextPortfolios = prevDb.portfolios.map((p) =>
+        p.id === updatedPortfolio.id
+          ? { ...updatedPortfolio, updated_at: new Date().toISOString() }
+          : p
+      );
+      const nextDb = {
+        ...prevDb,
+        portfolios: nextPortfolios,
+      };
+      saveDatabase(nextDb);
+      return nextDb;
+    });
     setHasUnsavedChanges(true);
   };
 
