@@ -5,6 +5,8 @@ import {
   resolveSafeSocialUrl,
   getActivePortfolioLinks,
   exportStandaloneStaticHtml,
+  getEffectiveBackgroundImage,
+  DEFAULT_NEUTRAL_AVATAR,
 } from '../data/socialCatalog';
 import PublicPortfolioView from './PublicPortfolioView';
 import AvatarCropperModal from './AvatarCropperModal';
@@ -13,12 +15,13 @@ const STITCH_URBAN_BG =
   'https://lh3.googleusercontent.com/aida-public/AB6AXuBBhk4anQlZhvxHF4EgTZLJQDjNN_YHisvNqFL6MdRkaAD1PjgAxGilinwsAIspwUF8eg2Da23iwQzX0yBsUYrbr4VbotKO3zelEkdGJ-0dHka7K1XsWtvKJDSAGK52_yRQDxqnUtdgOLWD6KZxBCIG2uLWUUTkzYBvRPoCSbGIqUXhCcf2zKv7yXlcYrMSsNy0wETA6wUdkXb1Q6SjYDr1-DcKFvCHylxgniZYaTFTY4XE5pyJbiBv';
 
 /**
- * RNF-01: Compresión y conversión automática de imagen subida a formato WebP (máx 5MB de entrada).
+ * RNF-01: Compresión y conversión automática de imagen subida a formato WebP/JPEG optimizado
+ * garantizando que no exceda la cuota de almacenamiento local y se actualice instantáneamente.
  */
-function compressImageFileToWebP(file, maxDimension = 1600, quality = 0.85) {
+function compressImageFileToWebP(file, maxDimension = 1200, quality = 0.8) {
   return new Promise((resolve, reject) => {
-    if (file.size > 5 * 1024 * 1024) {
-      reject(new Error('El archivo supera el límite máximo permitido de 5 MB (RNF-01).'));
+    if (file.size > 15 * 1024 * 1024) {
+      reject(new Error('El archivo supera el límite máximo permitido de 15 MB.'));
       return;
     }
     const reader = new FileReader();
@@ -41,13 +44,17 @@ function compressImageFileToWebP(file, maxDimension = 1600, quality = 0.85) {
         canvas.height = h;
         const ctx = canvas.getContext('2d');
         ctx.drawImage(img, 0, 0, w, h);
-        const webpDataUrl = canvas.toDataURL('image/webp', quality);
+        let dataUrl = canvas.toDataURL('image/webp', quality);
+        // Si el navegador no soporta codificación WebP o el resultado es muy pesado, usar JPEG comprimido
+        if (!dataUrl.startsWith('data:image/webp') || dataUrl.length > 380000) {
+          dataUrl = canvas.toDataURL('image/jpeg', 0.76);
+        }
         resolve({
-          dataUrl: webpDataUrl,
+          dataUrl,
           width: w,
           height: h,
           name: file.name.replace(/\.[^.]+$/, '.webp'),
-          sizeKb: Math.round((webpDataUrl.length * 0.75) / 1024),
+          sizeKb: Math.round((dataUrl.length * 0.75) / 1024),
         });
       };
       img.onerror = () => reject(new Error('No se pudo procesar la imagen seleccionada.'));
@@ -83,6 +90,9 @@ export default function PortfolioEditorView({
   const avatarInputRef = useRef(null);
   const bgInputRef = useRef(null);
 
+  const effectiveAvatar = portfolio.avatar_url || DEFAULT_NEUTRAL_AVATAR;
+  const effectiveBgImage = getEffectiveBackgroundImage(portfolio);
+
   const sortedGroups = [...(portfolio.social_network_groups || [])].sort(
     (a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0)
   );
@@ -114,7 +124,7 @@ export default function PortfolioEditorView({
     if (!file) return;
     setUploadError('');
     try {
-      const result = await compressImageFileToWebP(file, 1200, 0.9);
+      const result = await compressImageFileToWebP(file, 1080, 0.85);
       setCropperSource(result.dataUrl);
       setCropperOpen(true);
     } catch (err) {
@@ -122,15 +132,16 @@ export default function PortfolioEditorView({
     }
   };
 
-  // Subir imagen de fondo personalizada
+  // Subir imagen de fondo personalizada (distinta a la de perfil)
   const handleBgFileSelect = async (file) => {
     if (!file) return;
     setUploadError('');
     try {
-      const result = await compressImageFileToWebP(file, 1920, 0.85);
+      const result = await compressImageFileToWebP(file, 1200, 0.78);
       onUpdatePortfolio({
         ...portfolio,
         background_type: 'IMAGE',
+        has_custom_background: true,
         background_image_url: result.dataUrl,
         background_image_name: result.name,
         background_image_meta: `${result.width} × ${result.height} • ${result.sizeKb} KB (WebP)`,
@@ -361,7 +372,7 @@ export default function PortfolioEditorView({
             >
               <img
                 alt={portfolio.display_name || 'Perfil'}
-                src={portfolio.avatar_url || '/avatar-its-araaaby.jpeg'}
+                src={effectiveAvatar}
                 className="w-8 h-8 rounded-full object-cover ring-1 ring-surface-container-highest hover:ring-secondary transition-all"
               />
             </button>
@@ -455,8 +466,8 @@ export default function PortfolioEditorView({
                     </span>
                   </div>
                   <p className="font-body-sm text-body-sm text-on-surface-variant mt-0.5">
-                    Se mostrará centrada en la parte superior de tu portafolio público (Formatos
-                    JPG, PNG, WEBP máx. 5 MB).
+                    Se mostrará centrada en la parte superior de tu portafolio público y será la
+                    imagen predeterminada del modo Fondo Personalizado.
                   </p>
                 </div>
 
@@ -474,7 +485,7 @@ export default function PortfolioEditorView({
                     <div className="w-[96px] h-[96px] rounded-full overflow-hidden bg-surface-container-high shadow-lg ring-2 ring-primary/20">
                       <img
                         alt="Vista previa de perfil"
-                        src={portfolio.avatar_url || '/avatar-its-araaaby.jpeg'}
+                        src={effectiveAvatar}
                         className="w-full h-full object-cover"
                       />
                     </div>
@@ -518,7 +529,7 @@ export default function PortfolioEditorView({
                   <button
                     type="button"
                     onClick={() => {
-                      setCropperSource(portfolio.avatar_url || '/avatar-its-araaaby.jpeg');
+                      setCropperSource(effectiveAvatar);
                       setCropperOpen(true);
                     }}
                     className="h-11 px-3 rounded-xl bg-surface-container hover:bg-surface-container-high text-on-surface font-label-md text-label-md flex items-center justify-center gap-1.5 transition-colors"
@@ -602,8 +613,8 @@ export default function PortfolioEditorView({
                     </span>
                   </div>
                   <p className="font-body-sm text-body-sm text-on-surface-variant mt-0.5">
-                    Elige estrictamente entre un fondo negro sólido (#000000) o una fotografía
-                    personalizada con filtro de oscurecimiento.
+                    Elige entre un fondo negro sólido (#000000) o una fotografía personalizada (por
+                    defecto usa tu foto de perfil a menos que subas otra).
                   </p>
                 </div>
 
@@ -661,7 +672,7 @@ export default function PortfolioEditorView({
                     </div>
                   </button>
 
-                  {/* Opción B: Foto Personalizada */}
+                  {/* Opción B: Foto Personalizada (Por defecto usa la foto de perfil del usuario) */}
                   <button
                     type="button"
                     role="radio"
@@ -670,8 +681,6 @@ export default function PortfolioEditorView({
                       onUpdatePortfolio({
                         ...portfolio,
                         background_type: 'IMAGE',
-                        background_image_url:
-                          portfolio.background_image_url || '/avatar-its-araaaby.jpeg',
                       })
                     }
                     className={`group flex flex-col text-left rounded-xl p-2.5 transition-all relative ${
@@ -682,7 +691,7 @@ export default function PortfolioEditorView({
                   >
                     <div className="w-full aspect-[16/10] rounded-lg relative overflow-hidden bg-surface-container-lowest border border-outline-variant/25">
                       <img
-                        src={portfolio.background_image_url || '/avatar-its-araaaby.jpeg'}
+                        src={effectiveBgImage}
                         alt="Vista previa de fondo personalizado"
                         className="w-full h-full object-cover"
                       />
@@ -712,7 +721,9 @@ export default function PortfolioEditorView({
                           Foto Personalizada
                         </span>
                         <span className="font-body-sm text-body-sm text-outline">
-                          Con filtro de contraste
+                          {portfolio.has_custom_background
+                            ? 'Foto propia activa'
+                            : 'Tu foto de perfil'}
                         </span>
                       </div>
                       <span
@@ -740,22 +751,34 @@ export default function PortfolioEditorView({
 
                 {/* Controles Expandidos para "Foto Personalizada" (RF-05) */}
                 {portfolio.background_type === 'IMAGE' && (
-                  <div className="rounded-xl p-4 bg-surface-container flex flex-col gap-4 border border-outline-variant/20">
-                    {/* Fila de Miniatura, Metadatos y Botones Cambiar / Eliminar */}
+                  <div
+                    onDragOver={(e) => e.preventDefault()}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      const file = e.dataTransfer?.files?.[0];
+                      if (file) handleBgFileSelect(file);
+                    }}
+                    className="rounded-xl p-4 bg-surface-container flex flex-col gap-4 border border-outline-variant/20"
+                  >
+                    {/* Fila de Miniatura, Metadatos y Botones Cambiar / Restaurar */}
                     <div className="flex items-center gap-3">
                       <div className="w-16 h-12 rounded-lg overflow-hidden bg-surface-container-high shrink-0 border border-outline-variant/30">
                         <img
-                          src={portfolio.background_image_url || '/avatar-its-araaaby.jpeg'}
+                          src={effectiveBgImage}
                           alt="Miniatura de fondo"
                           className="w-full h-full object-cover"
                         />
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="font-label-md text-label-md text-on-surface font-semibold truncate">
-                          {portfolio.background_image_name || 'fondo_personalizado.webp'}
+                          {portfolio.has_custom_background && portfolio.background_image_name
+                            ? portfolio.background_image_name
+                            : 'Foto de perfil actual (Predeterminada)'}
                         </div>
                         <div className="font-body-sm text-body-sm text-outline truncate">
-                          {portfolio.background_image_meta || '1080 × 1920 • Optimizado WebP'}
+                          {portfolio.has_custom_background
+                            ? portfolio.background_image_meta || 'Fondo personalizado activo'
+                            : 'Se sincroniza automáticamente con tu foto de perfil'}
                         </div>
                       </div>
                       <div className="flex items-center gap-1.5 shrink-0">
@@ -764,8 +787,10 @@ export default function PortfolioEditorView({
                           onClick={() => bgInputRef.current?.click()}
                           className="h-9 px-3 rounded-lg bg-surface-container-high hover:bg-surface-container-highest text-on-surface font-label-sm text-label-sm flex items-center gap-1 transition-colors"
                         >
-                          <span className="material-symbols-outlined text-[15px]">sync</span>
-                          <span>Subir foto</span>
+                          <span className="material-symbols-outlined text-[15px]">
+                            cloud_upload
+                          </span>
+                          <span>Subir otra foto</span>
                         </button>
                         <button
                           type="button"
@@ -776,7 +801,7 @@ export default function PortfolioEditorView({
                             })
                           }
                           aria-label="Eliminar imagen de fondo y volver a fondo negro"
-                          title="Eliminar fondo y usar Fondo Negro"
+                          title="Volver a Fondo Negro"
                           className="w-9 h-9 rounded-lg bg-surface-container-high hover:bg-error-container text-on-surface-variant hover:text-error flex items-center justify-center transition-colors"
                         >
                           <span className="material-symbols-outlined text-[17px]">delete</span>
@@ -784,10 +809,10 @@ export default function PortfolioEditorView({
                       </div>
                     </div>
 
-                    {/* Botones rápidos de fondos predefinidos para probar */}
+                    {/* Botones rápidos de fondos predefinidos */}
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="font-label-sm text-label-sm text-outline uppercase">
-                        Fondos rápidos:
+                        Opciones de fondo:
                       </span>
                       <button
                         type="button"
@@ -795,13 +820,18 @@ export default function PortfolioEditorView({
                           onUpdatePortfolio({
                             ...portfolio,
                             background_type: 'IMAGE',
-                            background_image_url: portfolio.avatar_url || STITCH_URBAN_BG,
-                            background_image_name: 'foto_de_perfil.webp',
+                            has_custom_background: false,
+                            background_image_url: '',
+                            background_image_name: '',
                           })
                         }
-                        className="px-2.5 py-1 rounded-lg bg-surface-container-high hover:bg-surface-container-highest text-on-surface font-body-sm text-body-sm transition-colors"
+                        className={`px-2.5 py-1 rounded-lg font-body-sm text-body-sm transition-colors ${
+                          !portfolio.has_custom_background
+                            ? 'bg-secondary/20 text-secondary font-medium'
+                            : 'bg-surface-container-high hover:bg-surface-container-highest text-on-surface'
+                        }`}
                       >
-                        Usar mi foto de perfil
+                        Usar mi foto de perfil (Predeterminado)
                       </button>
                       <button
                         type="button"
@@ -809,8 +839,10 @@ export default function PortfolioEditorView({
                           onUpdatePortfolio({
                             ...portfolio,
                             background_type: 'IMAGE',
+                            has_custom_background: true,
                             background_image_url: STITCH_URBAN_BG,
                             background_image_name: 'urban_night_stitch.webp',
+                            background_image_meta: '1080 × 1920 • Preset Stitch',
                           })
                         }
                         className="px-2.5 py-1 rounded-lg bg-surface-container-high hover:bg-surface-container-highest text-on-surface font-body-sm text-body-sm transition-colors"
