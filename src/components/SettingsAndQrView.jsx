@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import QRCode from 'qrcode';
-import { exportStandaloneStaticHtml } from '../data/socialCatalog';
+import { exportStandaloneStaticHtml, DEFAULT_NEUTRAL_AVATAR } from '../data/socialCatalog';
 import { simpleHash, checkSlugAvailability } from '../services/authAndPortfolioStore';
 
 /**
@@ -178,7 +178,7 @@ export default function SettingsAndQrView({
               <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                 <div className="w-11 h-11 rounded-full bg-primary p-0.5 shadow-md flex items-center justify-center">
                   <img
-                    src={portfolio.avatar_url || '/avatar-its-araaaby.jpeg'}
+                    src={portfolio.avatar_url || DEFAULT_NEUTRAL_AVATAR}
                     alt={slug}
                     className="w-full h-full rounded-full object-cover"
                   />
