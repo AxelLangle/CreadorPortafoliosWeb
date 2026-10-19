@@ -91,7 +91,7 @@ export default function PortfolioEditorView({
 
   // Copiar enlace público al portapapeles
   const handleCopyPublicUrl = () => {
-    const publicUrl = `${window.location.origin}/?u=${encodeURIComponent(portfolio.slug || 'its.araaaby')}`;
+    const publicUrl = `${window.location.origin}/?u=${encodeURIComponent(portfolio.slug || 'usuario')}`;
     navigator.clipboard?.writeText(publicUrl);
     setCopyFeedback(true);
     setTimeout(() => setCopyFeedback(false), 2000);
@@ -314,7 +314,7 @@ export default function PortfolioEditorView({
               <span className="font-label-md text-label-md text-on-surface truncate max-w-[180px] sm:max-w-[260px]">
                 {copyFeedback
                   ? '¡Enlace copiado al portapapeles!'
-                  : `portafolio.app/${portfolio.slug || 'its.araaaby'}`}
+                  : `portafolio.app/${portfolio.slug || 'usuario'}`}
               </span>
               <span className="material-symbols-outlined text-[15px] text-on-surface-variant group-hover:text-primary transition-colors shrink-0">
                 {copyFeedback ? 'check' : 'content_copy'}
@@ -505,7 +505,7 @@ export default function PortfolioEditorView({
                 />
 
                 {/* Botones de Acción de Foto de Perfil */}
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+                <div className="grid grid-cols-2 gap-2.5">
                   <button
                     type="button"
                     onClick={() => avatarInputRef.current?.click()}
@@ -525,20 +525,6 @@ export default function PortfolioEditorView({
                   >
                     <span className="material-symbols-outlined text-[18px]">crop</span>
                     <span>Recortar 1:1</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() =>
-                      onUpdatePortfolio({
-                        ...portfolio,
-                        avatar_url: '/avatar-its-araaaby.jpeg',
-                      })
-                    }
-                    className="col-span-2 sm:col-span-1 h-11 px-3 rounded-xl bg-surface-container hover:bg-surface-container-high text-on-surface-variant hover:text-primary font-label-md text-label-md flex items-center justify-center gap-1.5 transition-colors"
-                  >
-                    <span className="material-symbols-outlined text-[18px]">restart_alt</span>
-                    <span>Foto its.araaaby</span>
                   </button>
                 </div>
 
@@ -566,7 +552,7 @@ export default function PortfolioEditorView({
                             display_name: raw ? `@${raw}` : '',
                           });
                         }}
-                        placeholder="its.araaaby"
+                        placeholder="tu.usuario"
                         className="w-full h-11 bg-surface-container text-on-surface font-body-md text-body-md pl-10 pr-24 rounded-xl focus:outline-none focus:bg-surface-container-high transition-colors"
                       />
                       <span className="absolute right-3 font-label-sm text-label-sm text-secondary bg-secondary/10 px-2 py-0.5 rounded-full">
@@ -766,7 +752,7 @@ export default function PortfolioEditorView({
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="font-label-md text-label-md text-on-surface font-semibold truncate">
-                          {portfolio.background_image_name || 'Foto de perfil its.araaaby.jpeg'}
+                          {portfolio.background_image_name || 'fondo_personalizado.webp'}
                         </div>
                         <div className="font-body-sm text-body-sm text-outline truncate">
                           {portfolio.background_image_meta || '1080 × 1920 • Optimizado WebP'}
@@ -809,13 +795,13 @@ export default function PortfolioEditorView({
                           onUpdatePortfolio({
                             ...portfolio,
                             background_type: 'IMAGE',
-                            background_image_url: '/avatar-its-araaaby.jpeg',
-                            background_image_name: 'Foto de perfil its.araaaby.jpeg',
+                            background_image_url: portfolio.avatar_url || STITCH_URBAN_BG,
+                            background_image_name: 'foto_de_perfil.webp',
                           })
                         }
                         className="px-2.5 py-1 rounded-lg bg-surface-container-high hover:bg-surface-container-highest text-on-surface font-body-sm text-body-sm transition-colors"
                       >
-                        Foto de @its.araaaby
+                        Usar mi foto de perfil
                       </button>
                       <button
                         type="button"
