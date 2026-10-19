@@ -20,13 +20,13 @@ export default function SettingsAndQrView({
   const [copied, setCopied] = useState(false);
   const [editingEmail, setEditingEmail] = useState(false);
   const [emailDraft, setEmailDraft] = useState(
-    portfolio.owner_email || portfolio.email || 'its.araaaby@portafolio.app'
+    portfolio.owner_email || portfolio.email || 'usuario@portafolio.app'
   );
   const [editingPassword, setEditingPassword] = useState(false);
   const [passwordDraft, setPasswordDraft] = useState('');
   const [statusNotice, setStatusNotice] = useState('');
 
-  const slug = portfolio.slug || 'its.araaaby';
+  const slug = portfolio.slug || 'usuario';
   const slugCheck = checkSlugAvailability(db, slug, portfolio.id);
 
   const publicShareUrl =
@@ -447,24 +447,6 @@ export default function SettingsAndQrView({
 
           {/* Acciones de Cuenta */}
           <div className="flex flex-col items-center gap-3 mt-2">
-            {portfolio.slug === 'its.araaaby' && (
-              <button
-                type="button"
-                onClick={() => {
-                  onResetToDefault();
-                  setStatusNotice(
-                    'Se han restaurado los enlaces originales del portafolio @its.araaaby.'
-                  );
-                }}
-                className="w-full h-11 rounded-lg bg-surface-container-high hover:bg-surface-container-highest text-on-surface flex items-center justify-center gap-2 font-label-md text-label-md transition-colors"
-              >
-                <span className="material-symbols-outlined text-[18px] text-secondary">
-                  restore
-                </span>
-                <span>Restaurar enlaces originales de @its.araaaby</span>
-              </button>
-            )}
-
             <button
               type="button"
               onClick={onLogout}
