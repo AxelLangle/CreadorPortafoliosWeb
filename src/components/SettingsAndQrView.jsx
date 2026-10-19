@@ -1,33 +1,33 @@
 import React, { useState, useEffect } from 'react';
 import QRCode from 'qrcode';
 import { exportStandaloneStaticHtml } from '../data/socialCatalog';
-
-const RESERVED_SLUGS = ['admin', 'login', 'settings', 'api', 'root'];
+import { simpleHash, checkSlugAvailability } from '../services/authAndPortfolioStore';
 
 /**
  * Pantalla 4: Configuración de Cuenta y Modal de Difusión (QR)
- * Basado en el mockup "LinkPortfolio - Configuración de Cuenta y Difusión (QR)" de Google Stitch AI.
+ * Incluye validación de Slug multi-cuenta, actualización de contraseña encriptada y cierre de sesión seguro.
  */
 export default function SettingsAndQrView({
+  db,
   portfolio,
+  session,
   onUpdatePortfolio,
   onResetToDefault,
+  onLogout,
   onNavigate,
 }) {
   const [qrDataUrl, setQrDataUrl] = useState('');
   const [copied, setCopied] = useState(false);
   const [editingEmail, setEditingEmail] = useState(false);
   const [emailDraft, setEmailDraft] = useState(
-    portfolio.email || 'its.araaaby@portafolio.app'
+    portfolio.owner_email || portfolio.email || 'its.araaaby@portafolio.app'
   );
   const [editingPassword, setEditingPassword] = useState(false);
   const [passwordDraft, setPasswordDraft] = useState('');
   const [statusNotice, setStatusNotice] = useState('');
-  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
 
   const slug = portfolio.slug || 'its.araaaby';
-  const isSlugValid =
-    slug.trim().length >= 3 && !RESERVED_SLUGS.includes(slug.trim().toLowerCase());
+  const slugCheck = checkSlugAvailability(db, slug, portfolio.id);
 
   const publicShareUrl =
     typeof window !== 'undefined'
@@ -84,19 +84,32 @@ export default function SettingsAndQrView({
             </span>
           </div>
 
-          <button
-            type="button"
-            onClick={() => onNavigate('public')}
-            className="h-9 px-3 rounded-lg bg-surface-container-high hover:bg-surface-container-highest font-label-md text-label-md text-primary flex items-center gap-1.5 transition-colors"
-          >
-            <span className="material-symbols-outlined text-[16px]">visibility</span>
-            <span>Ver Portafolio</span>
-          </button>
+          <div className="flex items-center gap-2">
+            {session?.role === 'ADMIN' && (
+              <button
+                type="button"
+                onClick={() => onNavigate('admin')}
+                className="h-9 px-3 rounded-lg bg-secondary/20 text-secondary font-label-sm text-label-sm flex items-center gap-1"
+              >
+                <span className="material-symbols-outlined text-[16px]">
+                  admin_panel_settings
+                </span>
+                <span>Consola Admin</span>
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => onNavigate('public')}
+              className="h-9 px-3 rounded-lg bg-surface-container-high hover:bg-surface-container-highest font-label-md text-label-md text-primary flex items-center gap-1.5 transition-colors"
+            >
+              <span className="material-symbols-outlined text-[16px]">visibility</span>
+              <span>Ver Portafolio</span>
+            </button>
+          </div>
         </div>
       </header>
 
       <main className="flex-1 flex flex-col w-full max-w-lg mx-auto px-4 pt-3">
-        {/* Barra de Navegación Interna */}
         <div className="flex items-center justify-between py-3 mb-2">
           <button
             type="button"
@@ -133,7 +146,7 @@ export default function SettingsAndQrView({
         )}
 
         <div className="flex flex-col gap-4">
-          {/* Tarjeta 1: Compartir mi Portafolio / Código QR Descargable (Stitch 4) */}
+          {/* Tarjeta 1: Compartir mi Portafolio / Código QR Descargable */}
           <section className="bg-surface-container-low rounded-xl p-5 flex flex-col items-center border border-outline-variant/15">
             <div className="w-full flex items-center justify-between mb-4">
               <div className="flex items-center gap-2">
@@ -149,7 +162,6 @@ export default function SettingsAndQrView({
               </span>
             </div>
 
-            {/* Lienzo del Código QR con Foto de Perfil Central */}
             <div className="relative p-3 bg-primary rounded-2xl flex items-center justify-center shadow-xl">
               {qrDataUrl ? (
                 <img
@@ -163,7 +175,6 @@ export default function SettingsAndQrView({
                 </div>
               )}
 
-              {/* Foto de Perfil en el Centro del QR */}
               <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                 <div className="w-11 h-11 rounded-full bg-primary p-0.5 shadow-md flex items-center justify-center">
                   <img
@@ -175,7 +186,6 @@ export default function SettingsAndQrView({
               </div>
             </div>
 
-            {/* Píldora de Enlace Público */}
             <div className="mt-4 px-3.5 py-1.5 rounded-full bg-surface-container flex items-center gap-2 border border-outline-variant/20">
               <span className="w-2 h-2 rounded-full bg-secondary shadow-[0_0_8px_rgba(78,222,163,0.8)]" />
               <span className="font-body-sm text-body-sm text-on-surface-variant font-mono">
@@ -189,7 +199,6 @@ export default function SettingsAndQrView({
               </span>
             </div>
 
-            {/* Botones de Acción de Difusión */}
             <div className="grid grid-cols-2 gap-3 w-full mt-5">
               <button
                 type="button"
@@ -228,7 +237,7 @@ export default function SettingsAndQrView({
             </button>
           </section>
 
-          {/* Tarjeta 2: Dirección y Visibilidad (Slug y Modo Mantenimiento / Borrador) */}
+          {/* Tarjeta 2: Dirección y Visibilidad */}
           <section className="bg-surface-container-low rounded-xl p-5 flex flex-col gap-4 border border-outline-variant/15">
             <div className="flex items-center gap-2">
               <div className="w-8 h-8 rounded-lg bg-surface-container-high flex items-center justify-center text-primary">
@@ -239,7 +248,6 @@ export default function SettingsAndQrView({
               </h2>
             </div>
 
-            {/* Edición de Slug con Validación en Tiempo Real (RF-02) */}
             <div className="flex flex-col gap-1.5">
               <label
                 htmlFor="slug-field"
@@ -256,16 +264,17 @@ export default function SettingsAndQrView({
                     id="slug-field"
                     type="text"
                     value={portfolio.slug}
-                    onChange={(e) =>
+                    onChange={(e) => {
+                      const nextVal = e.target.value.toLowerCase().replace(/\s+/g, '');
                       onUpdatePortfolio({
                         ...portfolio,
-                        slug: e.target.value.toLowerCase().replace(/\s+/g, ''),
-                      })
-                    }
+                        slug: nextVal,
+                      });
+                    }}
                     className="bg-transparent text-primary font-label-lg text-label-lg outline-none w-full px-0.5 font-mono"
                   />
                 </div>
-                {isSlugValid ? (
+                {slugCheck.available ? (
                   <div className="flex items-center gap-1 px-2 py-1 rounded-full bg-secondary-container/15 text-secondary shrink-0">
                     <span className="material-symbols-outlined text-[14px]">check_circle</span>
                     <span className="font-label-sm text-label-sm uppercase">Disponible</span>
@@ -273,7 +282,9 @@ export default function SettingsAndQrView({
                 ) : (
                   <div className="flex items-center gap-1 px-2 py-1 rounded-full bg-error-container/30 text-error shrink-0">
                     <span className="material-symbols-outlined text-[14px]">error</span>
-                    <span className="font-label-sm text-label-sm uppercase">Inválido</span>
+                    <span className="font-label-sm text-label-sm uppercase">
+                      {slugCheck.reason}
+                    </span>
                   </div>
                 )}
               </div>
@@ -281,7 +292,6 @@ export default function SettingsAndQrView({
 
             <div className="w-full h-[1px] bg-surface-container-highest my-0.5" />
 
-            {/* Interruptor de Privacidad: Portafolio Público Activo vs Modo Mantenimiento/Borrador */}
             <div className="flex items-center justify-between gap-3">
               <div className="flex flex-col pr-2">
                 <span className="font-label-lg text-label-lg text-primary">
@@ -315,18 +325,17 @@ export default function SettingsAndQrView({
             </div>
           </section>
 
-          {/* Tarjeta 3: Seguridad de la Cuenta (Actualización de Correo y Contraseña) */}
+          {/* Tarjeta 3: Seguridad de la Cuenta */}
           <section className="bg-surface-container-low rounded-xl p-5 flex flex-col gap-3 border border-outline-variant/15">
             <div className="flex items-center gap-2 mb-1">
               <div className="w-8 h-8 rounded-lg bg-surface-container-high flex items-center justify-center text-primary">
                 <span className="material-symbols-outlined text-[18px]">security</span>
               </div>
               <h2 className="font-headline-sm text-headline-sm text-primary">
-                Seguridad de la Cuenta
+                Seguridad de la Cuenta Propietaria
               </h2>
             </div>
 
-            {/* Fila 1: Correo electrónico */}
             <div className="flex flex-col gap-2">
               <button
                 type="button"
@@ -338,12 +347,12 @@ export default function SettingsAndQrView({
                     <span className="material-symbols-outlined text-[18px]">mail</span>
                   </div>
                   <span className="font-label-lg text-label-lg text-primary">
-                    Correo electrónico
+                    Correo propietario (Login / OAuth)
                   </span>
                 </div>
                 <div className="flex items-center gap-1.5 shrink-0">
                   <span className="font-body-sm text-body-sm text-on-surface-variant truncate max-w-[160px]">
-                    {portfolio.email || 'its.araaaby@portafolio.app'}
+                    {portfolio.owner_email || portfolio.email}
                   </span>
                   <span className="material-symbols-outlined text-on-surface-variant group-hover:text-primary transition-colors text-[20px]">
                     {editingEmail ? 'expand_less' : 'chevron_right'}
@@ -362,9 +371,14 @@ export default function SettingsAndQrView({
                   <button
                     type="button"
                     onClick={() => {
-                      onUpdatePortfolio({ ...portfolio, email: emailDraft });
+                      const clean = emailDraft.trim().toLowerCase();
+                      onUpdatePortfolio({
+                        ...portfolio,
+                        owner_email: clean,
+                        email: clean,
+                      });
                       setEditingEmail(false);
-                      setStatusNotice('Correo electrónico actualizado correctamente.');
+                      setStatusNotice('Correo propietario actualizado para inicio de sesión.');
                     }}
                     className="h-10 px-4 rounded-lg bg-primary text-on-primary font-label-md text-label-md font-semibold"
                   >
@@ -374,7 +388,6 @@ export default function SettingsAndQrView({
               )}
             </div>
 
-            {/* Fila 2: Cambiar contraseña */}
             <div className="flex flex-col gap-2">
               <button
                 type="button"
@@ -386,7 +399,7 @@ export default function SettingsAndQrView({
                     <span className="material-symbols-outlined text-[18px]">key</span>
                   </div>
                   <span className="font-label-lg text-label-lg text-primary">
-                    Cambiar contraseña
+                    Cambiar contraseña del portafolio
                   </span>
                 </div>
                 <div className="flex items-center gap-1.5 shrink-0">
@@ -411,9 +424,17 @@ export default function SettingsAndQrView({
                   <button
                     type="button"
                     onClick={() => {
+                      if (passwordDraft.trim().length < 6) {
+                        setStatusNotice('La contraseña debe tener al menos 6 caracteres.');
+                        return;
+                      }
+                      onUpdatePortfolio({
+                        ...portfolio,
+                        owner_password_hash: simpleHash(passwordDraft.trim()),
+                      });
                       setPasswordDraft('');
                       setEditingPassword(false);
-                      setStatusNotice('Contraseña actualizada con éxito.');
+                      setStatusNotice('Contraseña actualizada y cifrada con éxito.');
                     }}
                     className="h-10 px-4 rounded-lg bg-primary text-on-primary font-label-md text-label-md font-semibold"
                   >
@@ -424,86 +445,42 @@ export default function SettingsAndQrView({
             </div>
           </section>
 
-          {/* Acciones de Cuenta y Zona de Peligro */}
+          {/* Acciones de Cuenta */}
           <div className="flex flex-col items-center gap-3 mt-2">
-            <button
-              type="button"
-              onClick={() => {
-                onResetToDefault();
-                setStatusNotice(
-                  'Se han restaurado los datos originales del portafolio de prueba @its.araaaby.'
-                );
-              }}
-              className="w-full h-11 rounded-lg bg-surface-container-high hover:bg-surface-container-highest text-on-surface flex items-center justify-center gap-2 font-label-md text-label-md transition-colors"
-            >
-              <span className="material-symbols-outlined text-[18px] text-secondary">
-                restore
-              </span>
-              <span>Restaurar datos originales de @its.araaaby</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => onNavigate('onboarding')}
-              className="w-full h-12 rounded-lg bg-error-container/20 text-error hover:bg-error-container/30 flex items-center justify-center gap-2 font-label-lg text-label-lg transition-transform active:scale-[0.985]"
-            >
-              <span className="material-symbols-outlined text-[20px]">logout</span>
-              <span>Cerrar sesión</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setConfirmDeleteOpen(true)}
-              className="py-2 px-4 text-on-surface-variant hover:text-error transition-colors font-body-sm text-body-sm"
-            >
-              Eliminar cuenta y archivos multimedia permanentemente
-            </button>
-
-            <div className="flex items-center gap-1.5 text-on-surface-variant/60 font-label-sm text-label-sm pt-1">
-              <span className="material-symbols-outlined text-[14px]">verified_user</span>
-              <span>LinkPortfolio v2.4.0 • Modo Seguro HTTPS</span>
-            </div>
-          </div>
-        </div>
-      </main>
-
-      {/* Modal de Confirmación de Eliminación de Cuenta */}
-      {confirmDeleteOpen && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="w-full max-w-sm bg-surface-container-low border border-outline-variant/30 rounded-2xl p-5 flex flex-col gap-4 shadow-2xl">
-            <div className="flex items-center gap-2 text-error">
-              <span className="material-symbols-outlined text-[22px]">warning</span>
-              <h3 className="font-headline-sm text-headline-sm">
-                ¿Reiniciar o eliminar portafolio?
-              </h3>
-            </div>
-            <p className="font-body-sm text-body-sm text-on-surface-variant">
-              Esta acción restablecerá el almacenamiento local y te llevará a la pantalla de
-              registro inicial.
-            </p>
-            <div className="grid grid-cols-2 gap-2.5">
-              <button
-                type="button"
-                onClick={() => setConfirmDeleteOpen(false)}
-                className="h-10 rounded-lg bg-surface-container-high text-on-surface font-label-md text-label-md"
-              >
-                Cancelar
-              </button>
+            {portfolio.slug === 'its.araaaby' && (
               <button
                 type="button"
                 onClick={() => {
                   onResetToDefault();
-                  setConfirmDeleteOpen(false);
-                  onNavigate('onboarding');
+                  setStatusNotice(
+                    'Se han restaurado los enlaces originales del portafolio @its.araaaby.'
+                  );
                 }}
-                className="h-10 rounded-lg bg-error text-on-error font-label-md text-label-md font-semibold"
+                className="w-full h-11 rounded-lg bg-surface-container-high hover:bg-surface-container-highest text-on-surface flex items-center justify-center gap-2 font-label-md text-label-md transition-colors"
               >
-                Confirmar
+                <span className="material-symbols-outlined text-[18px] text-secondary">
+                  restore
+                </span>
+                <span>Restaurar enlaces originales de @its.araaaby</span>
               </button>
+            )}
+
+            <button
+              type="button"
+              onClick={onLogout}
+              className="w-full h-12 rounded-lg bg-error-container/20 text-error hover:bg-error-container/30 flex items-center justify-center gap-2 font-label-lg text-label-lg transition-transform active:scale-[0.985]"
+            >
+              <span className="material-symbols-outlined text-[20px]">logout</span>
+              <span>Cerrar sesión segura</span>
+            </button>
+
+            <div className="flex items-center gap-1.5 text-on-surface-variant/60 font-label-sm text-label-sm pt-1">
+              <span className="material-symbols-outlined text-[14px]">verified_user</span>
+              <span>LinkPortfolio v2.5.0 • Producción Aislada</span>
             </div>
           </div>
         </div>
-      )}
+      </main>
     </div>
   );
 }
