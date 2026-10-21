@@ -105,7 +105,9 @@ export default function App() {
         'content',
         'Plataforma minimalista de enlaces y perfiles oficiales de redes sociales.'
       );
+      setMeta('meta[property="og:image"]', 'content', '/logo-linkportafolio.png');
       setMeta('meta[name="twitter:title"]', 'content', 'LinkPortfolio — Portafolio Digital');
+      setMeta('meta[name="twitter:image"]', 'content', '/logo-linkportafolio.png');
       return;
     }
 
@@ -125,10 +127,9 @@ export default function App() {
       'content',
       activePortfolio.bio || `Conecta con todas las redes sociales oficiales de ${handle}.`
     );
-    if (activePortfolio.avatar_url) {
-      setMeta('meta[property="og:image"]', 'content', activePortfolio.avatar_url);
-      setMeta('meta[name="twitter:image"]', 'content', activePortfolio.avatar_url);
-    }
+    const socialShareImage = activePortfolio.avatar_url || '/logo-linkportafolio.png';
+    setMeta('meta[property="og:image"]', 'content', socialShareImage);
+    setMeta('meta[name="twitter:image"]', 'content', socialShareImage);
     setMeta('meta[name="twitter:title"]', 'content', `${handle} | Portafolio de Redes Sociales`);
   }, [activePortfolio, currentView]);
 
