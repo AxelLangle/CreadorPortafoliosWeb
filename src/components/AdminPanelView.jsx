@@ -5,7 +5,7 @@ import {
   createBlankPortfolio,
   authenticateWithGoogleOAuth2,
 } from '../services/authAndPortfolioStore';
-import { getActivePortfolioLinks } from '../data/socialCatalog';
+import { getActivePortfolioLinks, PLATFORM_ORDER } from '../data/socialCatalog';
 
 /**
  * Panel Exclusivo de Super Administrador con protección estricta por contraseña.
@@ -441,7 +441,7 @@ export default function AdminPanelView({
               )}
             </div>
             <span className="font-body-sm text-body-sm text-on-surface-variant">
-              En 7 redes oficiales
+              En {PLATFORM_ORDER.length} redes oficiales
             </span>
           </div>
 
