@@ -227,9 +227,11 @@ export default function OnboardingView({
       <header className="sticky top-0 inset-x-0 z-40 bg-surface/80 backdrop-blur-xl border-b border-outline-variant/15 shadow-[0_1px_8px_rgba(0,0,0,0.4)]">
         <div className="max-w-lg mx-auto h-16 px-4 flex items-center justify-between">
           <div className="flex items-center gap-2.5 min-h-[44px]">
-            <div className="w-8 h-8 rounded-lg bg-primary text-on-primary flex items-center justify-center font-bold text-sm shadow-sm">
-              LP
-            </div>
+            <img
+              src="/favicon.png"
+              alt="Logo LinkPortfolio"
+              className="w-8 h-8 rounded-lg object-contain shadow-sm"
+            />
             <span className="font-headline-sm text-headline-sm text-primary tracking-tight">
               LinkPortfolio
             </span>
