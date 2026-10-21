@@ -10,7 +10,7 @@ Plataforma web minimalista estilo **Link-in-Bio** preparada para **producción**
 2. [Enrutamiento y Seguridad en Producción](#2-enrutamiento-y-seguridad-en-producción)
 3. [Consola Exclusiva de Super Administrador (`/admin`)](#3-consola-exclusiva-de-super-administrador-admin)
 4. [Configuración de Inicio de Sesión con Google (OAuth 2.0)](#4-configuración-de-inicio-de-sesión-con-google-oauth-20)
-5. [Catálogo Oficial de las 7 Redes Sociales](#5-catálogo-oficial-de-las-7-redes-sociales)
+5. [Catálogo Oficial de las 16 Redes Sociales](#5-catálogo-oficial-de-las-16-redes-sociales)
 6. [Instalación, Variables de Entorno y Despliegue en Vercel](#6-instalación-variables-de-entorno-y-despliegue-en-vercel)
 
 ---
@@ -44,7 +44,7 @@ Accede entrando a `/admin` o `/?mode=admin` (o desde el botón **Admin** en la c
 - **Bloqueo Estricto por Contraseña:** Requiere el correo del administrador y la contraseña maestra (con protección contra fuerza bruta que bloquea temporalmente el acceso tras 5 intentos fallidos).
 - **Funciones CRUD Completas sobre Todos los Perfiles:**
   1. **Añadir (`+ Añadir Nuevo Perfil`):** Crea portafolios nuevos definiendo su `slug`, nombre visible, correo del propietario, contraseña y candado de protección.
-  2. **Modificar Diseño y Redes (`Modificar`):** Abre cualquier perfil del sistema dentro del **Editor Completo** (Foto 1:1, Fondo, Oscurecimiento y las 7 Redes Sociales con múltiples perfiles).
+  2. **Modificar Diseño y Redes (`Modificar`):** Abre cualquier perfil del sistema dentro del **Editor Completo** (Foto 1:1, Fondo, Oscurecimiento y las 16 Redes Sociales con múltiples perfiles).
   3. **Actualizar Credenciales y Ruta (`Credenciales`):** Cambia el `slug`, el correo autorizado (para Login y Google OAuth 2.0), la contraseña del propietario o el estado del candado de protección.
   4. **Eliminar (`Eliminar`):** Permite borrar perfiles con confirmación de seguridad (impidiendo borrar perfiles con candado activo a menos que se desbloquee explícitamente).
 
@@ -66,7 +66,9 @@ Para activarlo con tu proyecto de Google Cloud:
 
 ---
 
-## 5. Catálogo Oficial de las 7 Redes Sociales
+## 5. Catálogo Oficial de las 16 Redes Sociales
+
+LinkPortfolio admite **16 plataformas sociales oficiales**, cada una con validación de URL/username, autocompletado de prefijo y soporte para enlaces múltiples ilimitados:
 
 | Plataforma | Identificador | Formato de Enlace / Validación |
 | :--- | :--- | :--- |
@@ -77,6 +79,15 @@ Para activarlo con tu proyecto de Google Cloud:
 | **YouTube** | `YOUTUBE` | URL de canal (`https://www.youtube.com/@...`) o `@canal` |
 | **Threads** | `THREADS` | URL completa (`https://www.threads.com/@...`) o `@usuario` |
 | **WhatsApp** | `WHATSAPP` | Selector de lada internacional + número telefónico (genera `https://wa.me/...`) o enlace directo |
+| **GitHub** | `GITHUB` | URL completa (`https://github.com/...`) o `@usuario` |
+| **Pinterest** | `PINTEREST` | URL completa (`https://pinterest.com/...`) o `@usuario` |
+| **Reddit** | `REDDIT` | URL de perfil / comunidad (`https://reddit.com/u/...` o `https://reddit.com/r/...`) o `u/usuario` / `r/comunidad` |
+| **Twitch** | `TWITCH` | URL de canal (`https://twitch.tv/...`) o `usuario` |
+| **Discord** | `DISCORD` | URL de servidor o invitación (`https://discord.gg/...`, `https://discord.com/invite/...`) o `nombre#0000` |
+| **WeChat** | `WECHAT` | URL de perfil (`https://weixin.qq.com/...`) o `ID WeChat` |
+| **BeReal** | `BEREAL` | URL de perfil (`https://bere.al/...`) o `@usuario` |
+| **Tumblr** | `TUMBLR` | URL de blog (`https://...tumblr.com`) o `@blog` |
+| **Kwai** | `KWAI` | URL de perfil (`https://kwai.com/@...`) o `@usuario` |
 
 ---
 
