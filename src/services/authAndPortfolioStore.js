@@ -1,4 +1,8 @@
-import { INITIAL_PORTFOLIO_DATA, DEFAULT_NEUTRAL_AVATAR } from '../data/socialCatalog';
+import {
+  INITIAL_PORTFOLIO_DATA,
+  DEFAULT_NEUTRAL_AVATAR,
+  PLATFORM_ORDER,
+} from '../data/socialCatalog';
 
 const STORE_KEY = 'linkportfolio_prod_db_v2';
 const SESSION_KEY = 'linkportfolio_active_session_v2';
@@ -37,10 +41,37 @@ export function simpleHash(input) {
 }
 
 /**
+ * Garantiza que un portafolio tenga un grupo (desactivado por defecto) para cada red social
+ * del catálogo. Permite que los portafolios existentes reciban automáticamente las redes nuevas
+ * sin alterar el orden ni los enlaces que ya tenían configurados.
+ * Devuelve el mismo objeto si no hubo cambios.
+ */
+export function ensureAllPlatformGroups(portfolio) {
+  const groups = Array.isArray(portfolio.social_network_groups)
+    ? portfolio.social_network_groups
+    : [];
+  const existing = new Set(groups.map((g) => g.platform));
+  const missing = PLATFORM_ORDER.filter((platform) => !existing.has(platform));
+  if (missing.length === 0) return portfolio;
+
+  const maxOrder = groups.reduce((acc, g) => Math.max(acc, g.sort_order ?? 0), 0);
+  const appended = missing.map((platform, idx) => ({
+    id: `group-${platform.toLowerCase()}-${portfolio.id}`,
+    portfolio_id: portfolio.id,
+    platform,
+    is_enabled: false,
+    sort_order: maxOrder + idx + 1,
+    links: [],
+  }));
+
+  return { ...portfolio, social_network_groups: [...groups, ...appended] };
+}
+
+/**
  * Construye la base de datos inicial.
  */
 export function createInitialDatabase() {
-  const initialProfile = {
+  const initialProfile = ensureAllPlatformGroups({
     ...INITIAL_PORTFOLIO_DATA,
     id: 'portfolio-its-araaaby-001',
     slug: 'its.araaaby',
@@ -51,7 +82,7 @@ export function createInitialDatabase() {
     background_image_url: '',
     created_at: '2026-10-18T22:00:00Z',
     updated_at: new Date().toISOString(),
-  };
+  });
 
   return {
     version: 2,
@@ -77,7 +108,13 @@ export function loadDatabase() {
         // Normalizar portafolios para que ninguno use por error la foto de otro perfil como fondo
         let migrated = false;
         parsed.portfolios = parsed.portfolios.map((p) => {
-          const nextP = { ...p };
+          let nextP = { ...p };
+          // Agregar los grupos de redes sociales nuevas que aún no existan en el portafolio
+          const withAllGroups = ensureAllPlatformGroups(nextP);
+          if (withAllGroups !== nextP) {
+            nextP = withAllGroups;
+            migrated = true;
+          }
           if (nextP.slug !== 'its.araaaby' && nextP.avatar_url === '/avatar-its-araaaby.jpeg') {
             nextP.avatar_url = DEFAULT_NEUTRAL_AVATAR;
             migrated = true;
@@ -207,15 +244,6 @@ export function createBlankPortfolio({ slug, email, password, displayName, avata
     .replace(/[^a-z0-9._-]/g, '');
 
   const portfolioId = `portfolio-${cleanSlug}-${Date.now()}`;
-  const platforms = [
-    'FACEBOOK',
-    'INSTAGRAM',
-    'X',
-    'THREADS',
-    'TIKTOK',
-    'YOUTUBE',
-    'WHATSAPP',
-  ];
 
   return {
     id: portfolioId,
@@ -236,7 +264,7 @@ export function createBlankPortfolio({ slug, email, password, displayName, avata
     is_published: true,
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
-    social_network_groups: platforms.map((platform, idx) => ({
+    social_network_groups: PLATFORM_ORDER.map((platform, idx) => ({
       id: `group-${platform.toLowerCase()}-${portfolioId}`,
       portfolio_id: portfolioId,
       platform,
