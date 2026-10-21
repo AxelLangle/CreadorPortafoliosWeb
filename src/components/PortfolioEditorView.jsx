@@ -431,7 +431,7 @@ export default function PortfolioEditorView({
               >
                 share
               </span>
-              <span>Redes Sociales ({enabledNetworksCount}/7)</span>
+              <span>Redes Sociales ({enabledNetworksCount}/{sortedGroups.length})</span>
             </button>
           </div>
 
